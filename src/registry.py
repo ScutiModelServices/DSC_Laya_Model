@@ -47,6 +47,15 @@ class Registry:
     def loaded(self) -> dict[str, bool]:
         return {model: model in self._engines for model in MODELS}
 
+    models = MODELS
+
+    def reload(self) -> None:
+        """Load again every model that is loaded, so newly downloaded weights are used; the others load on first use."""
+        for model in MODELS:
+            with self._locks[model]:
+                if self._engines.pop(model, None) is not None:
+                    self._engines[model] = self._loader(model)
+
     def warm(self) -> None:
         for model in MODELS:
             self.predict(model, None)

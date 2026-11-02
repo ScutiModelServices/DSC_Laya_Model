@@ -5,10 +5,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-      # laya is only needed at runtime; tests use fake engines.
-      - run: pip install fastapi uvicorn httpx pytest playwright
-      - run: playwright install --with-deps chromium
-      - run: pytest -q
+      # laya is only needed at runtime; tests use fake engines. Skip it and torch, and do not let `uv run` re-sync them.
+      - run: uv sync --frozen --no-install-package laya --no-install-package torch
+      - run: uv run --no-sync playwright install --with-deps chromium
+      - run: uv run --no-sync pytest -q

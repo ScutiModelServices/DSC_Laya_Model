@@ -12,6 +12,7 @@ services:
     environment:
       LAYA_ADMIN_PASSWORD: ${LAYA_ADMIN_PASSWORD:-}
       LAYA_WARM: "1"
+      LAYA_UPDATE_CHECK_HOURS: ${LAYA_UPDATE_CHECK_HOURS:-6}  # 0 = never check on its own
       LAYA_TORCH_THREADS: ${LAYA_TORCH_THREADS:-}
       LAYA_REPLICAS: ${LAYA_REPLICAS:-1}  # shown read-only on /admin/
     volumes:

@@ -28,6 +28,7 @@ There are two ways to run it. Pick one: both use host port 9120.
 | `LAYA_ADMIN_PASSWORD` | empty | Password for the `/admin/` page, where per-project tokens are made. When set, every call except `/health` must send one of those tokens as `X-Internal-Token` (Garrison: `LAYA_TOKEN` in `apps/garrison/.env`). Empty = no auth. |
 | `LAYA_WARM` | `1` | Load both models at start. Compose sets it; with `0` the first request pays the load time. |
 | `LAYA_TORCH_THREADS` | torch decides | Cap on torch CPU threads; `/health` reports the value in use, `/admin/` can change it and saves the value (other replicas apply it on restart). |
+| `LAYA_UPDATE_CHECK_HOURS` | `6` | How often each replica looks for a newer `laya` package (PyPI) and newer weights (Hugging Face). It only reports; `0` turns the timer off. Off too with `LAYA_OFFLINE=1`. |
 | `LAYA_OFFLINE` | unset | `1` uses only already-downloaded weights. Neither compose file passes it: add it under `environment:` of `laya` to use it. |
 
 Put the variables in a `.env` next to the compose file that runs the stack (this folder, or `Citadel/`).
@@ -41,7 +42,7 @@ The standalone stack does not depend on Citadel or any other project. A caller r
 docker compose up -d --build
 ```
 
-Without Docker: `run.bat` (creates `.venv_laya` on first run, listens on `127.0.0.1:9120`).
+Without Docker: `run.bat` (runs `uv sync` into `.venv`, listens on `127.0.0.1:9120`).
 
 ## Inside the Citadel stack
 
@@ -99,6 +100,13 @@ docker compose restart laya_lb
 ```
 
 Rebuilding replaces the replicas, so restart `laya_lb` afterwards. The weights volume survives rebuilds.
+
+### Updating the models from `/admin/`
+
+The **Updates** card shows the installed `laya` package and each weights repository next to the newest one, and flags what is newer. **Check now** looks right away; the replicas also check every `LAYA_UPDATE_CHECK_HOURS`.
+
+- **Weights:** **Download new weights** fetches the newest revision from the Hub into the shared `models` volume and reloads the models on the replica that took the click. The other replicas keep the old weights until they restart (`docker compose restart laya`). The download is the Hub's current `main`, not the reviewed SHA in `laya.revisions.PINNED_REVISIONS`; set `LAYA_REVISION=reviewed` to pin a deployment to the reviewed one.
+- **Package:** only reported. A running container cannot change its own install: run `uv lock --upgrade-package laya`, then `docker compose up -d --build` and `docker compose restart laya_lb`.
 
 ## Troubleshooting
 

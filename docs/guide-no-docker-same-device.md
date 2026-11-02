@@ -8,19 +8,16 @@ Run the service directly with Python. One process, no load balancer, listens on 
 - RAM for both models (one copy).
 
 ## Windows
-Double-click `run.bat` or run it in a terminal from `LayaModel/`. First run creates `.venv_laya` and runs
-`pip install -e ".[dev]"`, then starts `python src/app.py`.
+Double-click `run.bat` or run it in a terminal from `LayaModel/`. It runs `uv sync` to create or update `.venv`
+(needs uv: `python -m pip install uv`), then starts `python src/app.py`.
 
 ## Linux / macOS
 ```bash
 cd LayaModel
-python3 -m venv .venv_laya
-source .venv_laya/bin/activate
-pip install -e ".[dev]"
-python src/app.py
+uv sync
+uv run python src/app.py
 ```
-Tip: for a smaller CPU-only install, run first
-`pip install torch --index-url https://download.pytorch.org/whl/cpu`.
+`uv.lock` already pins torch to the CPU-only index on Linux and Windows, so no extra step is needed for a small install.
 
 ## Settings
 `run.bat` and `app.py` read the real environment, **not** `.env`. Set variables before starting:
@@ -54,4 +51,4 @@ Expect `{"status": "ok", ...}`.
 Ctrl+C in the terminal. Do not run this and the Docker stack together: both use port 9120.
 
 ## Tests
-`pytest` inside the venv.
+`uv run pytest`.

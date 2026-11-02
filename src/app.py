@@ -25,6 +25,7 @@ from answers import InputTooLong, check_questions
 from registry import Registry
 import settings
 from tokens import TokenStore
+from updates import Updates
 
 _log = logging.getLogger(__name__)
 
@@ -80,18 +81,33 @@ def _set_torch_threads(threads: int) -> None:
 
 
 def create_app(registry: Registry | None = None, admin_password: str | None = None, warm: bool = False,
-               tokens: TokenStore | None = None) -> FastAPI:
+               tokens: TokenStore | None = None, updates: Updates | None = None, check_hours: float = 0) -> FastAPI:
     """`admin_password` (LAYA_ADMIN_PASSWORD) unlocks /admin/, where each project gets a token of its own; when it
     is set, every call except /health must send one of those tokens in the X-Internal-Token header. Unset = no
-    auth at all (local use only). `tokens` holds the project tokens (LAYA_TOKENS_FILE)."""
+    auth at all (local use only). `tokens` holds the project tokens (LAYA_TOKENS_FILE). `check_hours` > 0 looks for
+    newer Laya releases that often (LAYA_UPDATE_CHECK_HOURS); it never downloads. `updates` is off with LAYA_OFFLINE=1."""
     tokens = tokens or TokenStore(os.environ.get("LAYA_TOKENS_FILE", "tokens.json"))
-    registry = registry or Registry(offline=os.environ.get("LAYA_OFFLINE") == "1")
+    offline = os.environ.get("LAYA_OFFLINE") == "1"
+    registry = registry or Registry(offline=offline)
+    updates = None if offline else updates or Updates(registry)
+
+    async def check_forever() -> None:
+        while True:
+            try:
+                await anyio.to_thread.run_sync(updates.check)
+            except Exception:
+                _log.exception("Update check failed")
+            await anyio.sleep(check_hours * 3600)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         if warm:
             await anyio.to_thread.run_sync(registry.warm)
-        yield
+        async with anyio.create_task_group() as background:
+            if updates and check_hours > 0:
+                background.start_soon(check_forever)
+            yield
+            background.cancel_scope.cancel()
 
     def authorize(x_internal_token: str = Header("")) -> None:
         if admin_password and not tokens.valid(x_internal_token):
@@ -163,6 +179,32 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         replicas = os.environ.get("LAYA_REPLICAS", "").strip()
         return {"replicas": int(replicas) if replicas.isdigit() else None}
 
+    def enabled() -> Updates:
+        if updates is None:
+            raise HTTPException(409, "Updates are off while LAYA_OFFLINE=1")
+        return updates
+
+    @app.get("/admin/updates", dependencies=[Depends(admin)])
+    def update_status() -> dict[str, Any]:
+        """The last check's result (no network); `enabled` is false with LAYA_OFFLINE=1."""
+        return {"enabled": updates is not None, **(updates.status() if updates else {})}
+
+    @app.post("/admin/updates/check", dependencies=[Depends(admin)])
+    async def check_updates() -> dict[str, Any]:
+        return {"enabled": True, **await anyio.to_thread.run_sync(enabled().check)}
+
+    @app.post("/admin/updates/weights", dependencies=[Depends(admin)])
+    async def update_weights() -> dict[str, Any]:
+        """Downloads newer weights into the shared models volume and reloads this replica; other replicas load them
+        when they restart. The laya package itself cannot be changed here: rebuild the image for that."""
+        try:
+            return {"enabled": True, **await anyio.to_thread.run_sync(enabled().update_weights)}
+        except HTTPException:
+            raise
+        except Exception as error:
+            _log.exception("Weight update failed")
+            raise HTTPException(502, f"Weight update failed: {error}") from None
+
     @app.get("/admin/tokens", dependencies=[Depends(admin)])
     def list_tokens() -> dict[str, Any]:
         return {"tokens": tokens.list()}
@@ -191,7 +233,8 @@ def main() -> None:
     threads = saved.get("torch_threads") or os.environ.get("LAYA_TORCH_THREADS", "").strip()
     if threads:  # before the models load
         _set_torch_threads(int(threads))
-    app = create_app(admin_password=os.environ.get("LAYA_ADMIN_PASSWORD") or None, warm=os.environ.get("LAYA_WARM", "1") == "1")
+    app = create_app(admin_password=os.environ.get("LAYA_ADMIN_PASSWORD") or None, warm=os.environ.get("LAYA_WARM", "1") == "1",
+                     check_hours=float(os.environ.get("LAYA_UPDATE_CHECK_HOURS", "6") or 0))
     uvicorn.run(app, host=os.environ.get("LAYA_HOST", "127.0.0.1"), port=int(os.environ.get("LAYA_PORT", "9120")))
 
 
