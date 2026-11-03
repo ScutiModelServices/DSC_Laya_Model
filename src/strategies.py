@@ -21,7 +21,7 @@ from __future__ import annotations
 import time
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from answers import InputTooLong, normalize
 from registry import Registry
@@ -357,19 +357,24 @@ def _compact(answer: dict) -> dict:
     return out
 
 
-def run(registry: Registry, strategy: str, text: str, questions: dict[str, dict], max_len: int,
-        tuning: Tuning = Tuning(), trace: bool = False, project: str | None = None) -> dict[str, Any]:
-    """Answer every question with the named strategy. Raises ValueError when no model could answer one.
-    `calls` lists each model call made (checkpoint, tokens read, duration) for the caller's usage log."""
+def run_iter(registry: Registry, strategy: str, text: str, questions: dict[str, dict], max_len: int,
+             tuning: Tuning = Tuning(), trace: bool = False, project: str | None = None) -> Iterator[tuple[str, Any]]:
+    """Answer the questions one after the other: ("answer", (qid, answer)) as each is settled, then ("done", result).
+    Most strategies ask each model once for all the questions, so the first answer arrives after that call and the
+    rest follow at once; a strategy that asks a second model or narrows a question makes later answers wait longer.
+    Raises ValueError (with `calls`) when no model could answer a question."""
     settle = STRATEGIES[strategy]
     session = Session(registry, text, questions, max_len, tuning, project)
+    answers: dict[str, dict] = {}
     try:
-        answers = {qid: settle(session, qid, spec) for qid, spec in questions.items()}
+        for qid, spec in questions.items():
+            answers[qid] = settle(session, qid, spec)
+            yield "answer", (qid, answers[qid] if trace else _compact(answers[qid]))
     except ValueError as error:
         error.calls = session.calls  # type: ignore[attr-defined]
         raise
     bases = set(CHECKPOINT.values())
-    return {
+    yield "done", {
         "strategy": strategy,
         "model": "+".join(dict.fromkeys(call["model"] for call in session.calls if call["ok"])),
         "fallback": any(call["fallback"] for call in session.calls),
@@ -379,3 +384,13 @@ def run(registry: Registry, strategy: str, text: str, questions: dict[str, dict]
         "uncertain": any(a["uncertain"] for a in answers.values()),
         "calls": session.calls,
     }
+
+
+def run(registry: Registry, strategy: str, text: str, questions: dict[str, dict], max_len: int,
+        tuning: Tuning = Tuning(), trace: bool = False, project: str | None = None) -> dict[str, Any]:
+    """Answer every question with the named strategy. Raises ValueError when no model could answer one.
+    `calls` lists each model call made (checkpoint, tokens read, duration) for the caller's usage log."""
+    for kind, value in run_iter(registry, strategy, text, questions, max_len, tuning, trace, project):
+        if kind == "done":
+            return value
+    raise AssertionError("run_iter always ends with done")
