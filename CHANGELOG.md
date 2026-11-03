@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Tokens: edit the project list and a calls-per-minute limit without revoking (`PUT /admin/tokens/{id}`), optional expiry, per-token errors and average time on the admin page, and `GET /metrics` (Prometheus text). Over the rate limit a call gets `429` with `Retry-After`.
+- Admin page: **Project models** card.
+- `/v1/ask` answer cache (`LAYA_CACHE_SIZE`, default 256 per replica, header `X-Laya-Cache`); new weights and replaced project files clear it.
+- Replicas reload by themselves after another replica downloaded new weights (`LAYA_SYNC_SECONDS`, default 10).
+
 - Tokens can be limited to a list of projects (set on the admin page when creating one). Another project is `403`; no `project` is always allowed.
 
 ## 1.1.0

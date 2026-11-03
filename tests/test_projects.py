@@ -218,3 +218,14 @@ def test_replaced_checkpoint_files_are_loaded_again_once_idle(tmp_path, monkeypa
     assert loads == [path, path]  # reloaded by the lease that found it idle after the first utime
     predict_project(registry, "demo", call)
     assert loads == [path, path, path]  # the second replacement is picked up once nothing holds it
+
+
+def test_cache_is_not_reused_after_project_files_are_replaced(tmp_path, monkeypatch):
+    checkpoint(tmp_path, "demo")
+    monkeypatch.setenv("LAYA_PROJECT_MODELS_DIR", str(tmp_path))
+    http = TestClient(create_app(Registry(lambda model: FakeEngine()), cache_size=4))
+    body = {**BODY, "strategy": "typed-only", "project": "demo"}
+    assert http.post("/v1/ask", json=body).headers["X-Laya-Cache"] == "miss"
+    assert http.post("/v1/ask", json=body).headers["X-Laya-Cache"] == "hit"
+    os.utime(tmp_path / "demo" / "model.safetensors", ns=(5 * 10**9, 5 * 10**9))
+    assert http.post("/v1/ask", json=body).headers["X-Laya-Cache"] == "miss"

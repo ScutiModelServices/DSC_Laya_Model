@@ -8,10 +8,13 @@ shortcut: versions are compared for inequality, not order; upgrade if a downgrad
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import urllib.request
+import uuid
 from importlib import metadata
+from pathlib import Path
 from typing import Any, Callable
 
 PACKAGE = "laya"
@@ -56,6 +59,12 @@ def _download(repo: str) -> None:
     snapshot_download(repo_id=repo, token=False)
 
 
+def default_marker() -> Path:
+    """File in the shared models volume whose content changes when one replica downloads new weights."""
+    configured = os.environ.get("LAYA_WEIGHTS_MARKER")
+    return Path(configured) if configured else Path(os.environ.get("HF_HOME") or "~/.cache/huggingface").expanduser() / ".laya-weights-version"
+
+
 class Updates:
     """The `latest_package`, `remote_sha`, `cached_sha`, `download` and `installed` callables are injectable for tests."""
 
@@ -63,8 +72,10 @@ class Updates:
                  remote_sha: Callable[[str], str] = _remote_sha, cached_sha: Callable[[str], str | None] = _cached_sha,
                  download: Callable[[str], None] = _download,
                  installed: Callable[[], str] = lambda: metadata.version(PACKAGE),
-                 model_repos: Callable[[], list[str]] | None = None) -> None:
+                 model_repos: Callable[[], list[str]] | None = None, marker: Path | None = None) -> None:
         self._registry = registry
+        self._marker = marker
+        self._seen = self._read_marker()
         self._latest_package, self._remote_sha, self._cached_sha = latest_package, remote_sha, cached_sha
         self._download, self._installed = download, installed
         self._repos = model_repos or (lambda: repos(registry.models))
@@ -92,6 +103,27 @@ class Updates:
         self._status = status
         return status
 
+    def _read_marker(self) -> str:
+        try:
+            return self._marker.read_text("utf-8") if self._marker else ""
+        except OSError:
+            return ""
+
+    def sync(self) -> bool:
+        """Reload the models when another replica downloaded new weights since the last call."""
+        current = self._read_marker()
+        if current == self._seen:
+            return False
+        self._seen = current
+        self._registry.reload()
+        return True
+
+    def _announce(self) -> None:
+        if self._marker:
+            self._marker.parent.mkdir(parents=True, exist_ok=True)
+            self._seen = uuid.uuid4().hex
+            self._marker.write_text(self._seen, "utf-8")
+
     def update_weights(self) -> dict[str, Any]:
         """Download every repository that has a newer revision, then reload the models. Raises when a download fails."""
         with self._lock:
@@ -103,4 +135,8 @@ class Updates:
                 self._download(repo)
             if stale:
                 self._registry.reload()
-            return self._check()
+                self._announce()
+            result = {**self._check()}
+            if stale and self._marker:
+                result["reload_note"] = "Weights downloaded; this replica loaded them. The other replicas reload them within a few seconds."
+            return result

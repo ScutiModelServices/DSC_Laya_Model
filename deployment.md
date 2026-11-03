@@ -29,6 +29,8 @@ There are two ways to run it. Pick one: both use host port 9120.
 | `LAYA_WARM` | `1` | Load both models at start. Compose sets it; with `0` the first request pays the load time. |
 | `LAYA_TORCH_THREADS` | torch decides | Cap on torch CPU threads; `/health` reports the value in use, `/admin/` can change it and saves the value (other replicas apply it on restart). |
 | `LAYA_UPDATE_CHECK_HOURS` | `6` | How often each replica looks for a newer `laya` package (PyPI) and newer weights (Hugging Face). It only reports; `0` turns the timer off. Off too with `LAYA_OFFLINE=1`. |
+| `LAYA_SYNC_SECONDS` | `10` | How often a replica looks for weights another replica downloaded (a marker file in the models volume) and reloads its models. `0` turns it off. |
+| `LAYA_CACHE_SIZE` | `256` | Answers each replica keeps for identical `/v1/ask` requests (response header `X-Laya-Cache: hit` or `miss`). Cleared by new weights and by changed project files. `0` turns it off. |
 | `LAYA_OFFLINE` | unset | `1` uses only already-downloaded weights. Neither compose file passes it: add it under `environment:` of `laya` to use it. |
 | `LAYA_PROJECT_MODELS_DIR` | unset | Local project-checkpoint root; empty disables it. With Docker use `/models/projects` inside the shared `models` volume. |
 | `LAYA_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines per replica (minimum `1`); LRU evicts idle engines only. Base models are never evicted. |
@@ -133,7 +135,7 @@ Rebuilding replaces the replicas, so restart `laya_lb` afterwards. The weights v
 
 The **Updates** card shows the installed `laya` package and each weights repository next to the newest one, and flags what is newer. **Check now** looks right away; the replicas also check every `LAYA_UPDATE_CHECK_HOURS`.
 
-- **Weights:** **Download new weights** fetches the newest revision from the Hub into the shared `models` volume and reloads the models on the replica that took the click. The other replicas keep the old weights until they restart (`docker compose restart laya`). The download is the Hub's current `main`, not the reviewed SHA in `laya.revisions.PINNED_REVISIONS`; set `LAYA_REVISION=reviewed` to pin a deployment to the reviewed one.
+- **Weights:** **Download new weights** fetches the newest revision from the Hub into the shared `models` volume and reloads the models on the replica that took the click. The other replicas notice within `LAYA_SYNC_SECONDS` and reload them themselves; the models are loaded again, so each replica needs RAM for the old and new copy for a moment. The download is the Hub's current `main`, not the reviewed SHA in `laya.revisions.PINNED_REVISIONS`; set `LAYA_REVISION=reviewed` to pin a deployment to the reviewed one.
 - **Package:** only reported. A running container cannot change its own install: run `uv lock --upgrade-package laya`, then `docker compose up -d --build` and `docker compose restart laya_lb`.
 
 ## Troubleshooting

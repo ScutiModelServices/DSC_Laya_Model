@@ -72,6 +72,7 @@ class Registry:
     def __init__(self, loader: Callable[[str], Any] | None = None, offline: bool = False) -> None:
         self._loader = loader or (lambda checkpoint: _load_laya(checkpoint, offline))
         self._engines: dict[str, Any] = {}
+        self.generation = 0  # bumped when the base weights are reloaded; part of the answer cache key
         self._locks = {model: threading.Lock() for model in MODELS}
         root = os.environ.get("LAYA_PROJECT_MODELS_DIR")
         self._project_root = Path(root).resolve() if root else None
@@ -153,6 +154,12 @@ class Registry:
             with self._locks[model]:
                 if self._engines.pop(model, None) is not None:
                     self._engines[model] = self._loader(model)
+        self.generation += 1
+
+    def cache_part(self, project: str | None) -> tuple:
+        """Changes whenever the weights an answer to this project would come from change."""
+        checkpoint = self._project_checkpoint(project) if project is not None else None
+        return (self.generation, checkpoint, _stamp(checkpoint) if checkpoint else ())
 
     def warm(self) -> None:
         for model in MODELS:

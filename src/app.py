@@ -8,16 +8,22 @@ GET /v1/strategies lists the strategies; GET /health reports which models are lo
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import json
 import logging
 import os
+import time
 from pathlib import Path
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
 
 import anyio.to_thread
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 import strategies
@@ -25,7 +31,7 @@ from answers import InputTooLong, check_questions
 from registry import PROJECT_PATTERN, ProjectBusy, Registry
 import settings
 from tokens import TokenStore
-from updates import Updates
+from updates import Updates, default_marker
 
 _log = logging.getLogger(__name__)
 
@@ -60,6 +66,13 @@ class CombineRequest(BaseModel):
 class NewToken(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     projects: list[Annotated[str, Field(pattern=PROJECT_PATTERN)]] | None = Field(None, max_length=32)
+    rate: int | None = Field(None, ge=1, le=100_000)  # calls per minute
+    expires_days: int | None = Field(None, ge=1, le=3650)
+
+
+class TokenScope(BaseModel):
+    projects: list[Annotated[str, Field(pattern=PROJECT_PATTERN)]] | None = Field(None, max_length=32)
+    rate: int | None = Field(None, ge=1, le=100_000)
 
 
 class Threads(BaseModel):
@@ -83,15 +96,32 @@ def _set_torch_threads(threads: int) -> None:
 
 
 def create_app(registry: Registry | None = None, admin_password: str | None = None, warm: bool = False,
-               tokens: TokenStore | None = None, updates: Updates | None = None, check_hours: float = 0) -> FastAPI:
+               tokens: TokenStore | None = None, updates: Updates | None = None, check_hours: float = 0,
+               cache_size: int = 0, sync_seconds: float = 0) -> FastAPI:
     """`admin_password` (LAYA_ADMIN_PASSWORD) unlocks /admin/, where each project gets a token of its own; when it
     is set, every call except /health must send one of those tokens in the X-Internal-Token header. Unset = no
     auth at all (local use only). `tokens` holds the project tokens (LAYA_TOKENS_FILE). `check_hours` > 0 looks for
-    newer Laya releases that often (LAYA_UPDATE_CHECK_HOURS); it never downloads. `updates` is off with LAYA_OFFLINE=1."""
+    newer Laya releases that often (LAYA_UPDATE_CHECK_HOURS); it never downloads. `updates` is off with LAYA_OFFLINE=1.
+    `cache_size` > 0 keeps that many answers per replica (LAYA_CACHE_SIZE); `sync_seconds` > 0 makes the replica look
+    that often for weights another replica downloaded (LAYA_SYNC_SECONDS)."""
     tokens = tokens or TokenStore(os.environ.get("LAYA_TOKENS_FILE", "tokens.json"))
     offline = os.environ.get("LAYA_OFFLINE") == "1"
     registry = registry or Registry(offline=offline)
-    updates = None if offline else updates or Updates(registry)
+    updates = None if offline else updates or Updates(registry, marker=default_marker())
+    cache: OrderedDict[str, Any] = OrderedDict()  # shortcut: per replica, in memory; upgrade to a shared store if hit rate matters
+
+    def cache_key(body: AskRequest) -> str:
+        part = [body.model_dump(), registry.cache_part(body.project)]
+        return hashlib.sha256(json.dumps(part, sort_keys=True, default=str).encode()).hexdigest()
+
+    async def sync_forever() -> None:
+        while True:
+            await anyio.sleep(sync_seconds)
+            try:
+                if await anyio.to_thread.run_sync(updates.sync):
+                    _log.info("Reloaded models: new weights were downloaded by another replica")
+            except Exception:
+                _log.exception("Weight sync failed")
 
     async def check_forever() -> None:
         while True:
@@ -108,16 +138,22 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         async with anyio.create_task_group() as background:
             if updates and check_hours > 0:
                 background.start_soon(check_forever)
+            if updates and sync_seconds > 0:
+                background.start_soon(sync_forever)
             yield
             background.cancel_scope.cancel()
 
-    def authorize(x_internal_token: str = Header("")) -> list[str] | None:
+    def authorize(request: Request, x_internal_token: str = Header("")) -> list[str] | None:
         """The projects the token is limited to, or None for all. Unset admin password = no auth."""
         if not admin_password:
             return None
         row = tokens.lookup(x_internal_token)
         if row is None:
             raise HTTPException(401, "Invalid token")
+        wait = tokens.throttle(row)
+        if wait:
+            raise HTTPException(429, "Too many requests for this token", headers={"Retry-After": str(wait)})
+        request.state.token_id = row["id"]
         return row.get("projects")
 
     def check_scope(allowed: list[str] | None, project: str | None) -> None:
@@ -141,7 +177,7 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         return {"default": strategies.DEFAULT_STRATEGY, "strategies": list(strategies.STRATEGIES)}
 
     @app.post("/v1/ask")
-    async def ask(body: AskRequest, allowed: list[str] | None = Depends(authorize)) -> Any:
+    async def ask(body: AskRequest, response: Response, allowed: list[str] | None = Depends(authorize)) -> Any:
         check_scope(allowed, body.project)
         try:
             check_questions(body.questions)
@@ -152,10 +188,21 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         def failure(status: int, error: ValueError) -> HTTPException:
             return HTTPException(status, {"message": str(error), "calls": getattr(error, "calls", [])})
 
+        key = cache_key(body) if cache_size else None
+        if key in cache:
+            cache.move_to_end(key)
+            response.headers["X-Laya-Cache"] = "hit"
+            return cache[key]
         try:
-            return await anyio.to_thread.run_sync(
+            result = await anyio.to_thread.run_sync(
                 strategies.run, registry, body.strategy, body.text, body.questions, body.max_len, tuning, body.trace, body.project,
             )
+            if key:
+                cache[key] = result
+                while len(cache) > cache_size:
+                    cache.popitem(last=False)
+                response.headers["X-Laya-Cache"] = "miss"
+            return result
         except InputTooLong as error:
             raise failure(413, error) from None
         except ValueError as error:
@@ -227,7 +274,27 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 
     @app.post("/admin/tokens", dependencies=[Depends(admin)])
     def create_token(body: NewToken) -> dict[str, Any]:
-        return tokens.create(body.name.strip(), body.projects)
+        return tokens.create(body.name.strip(), body.projects, body.rate, body.expires_days)
+
+    @app.put("/admin/tokens/{token_id}", dependencies=[Depends(admin)])
+    def update_token(token_id: str, body: TokenScope) -> dict[str, bool]:
+        if not tokens.update(token_id, body.projects, body.rate):
+            raise HTTPException(404, "No such token")
+        return {"ok": True}
+
+    @app.middleware("http")
+    async def measure(request: Request, call_next):
+        started = time.perf_counter()
+        response = await call_next(request)
+        token_id = getattr(request.state, "token_id", None)
+        if token_id:
+            await run_in_threadpool(tokens.record, token_id, (time.perf_counter() - started) * 1000, response.status_code >= 500)
+        return response
+
+    @app.get("/metrics", dependencies=[Depends(admin)])
+    def metrics() -> PlainTextResponse:
+        """Prometheus text per token, from the shared token file (up to a minute behind). Send the admin password."""
+        return PlainTextResponse(tokens.metrics("laya"))
 
     @app.delete("/admin/tokens/{token_id}", dependencies=[Depends(admin)])
     def revoke_token(token_id: str) -> dict[str, bool]:
@@ -250,7 +317,9 @@ def main() -> None:
     if threads:  # before the models load
         _set_torch_threads(int(threads))
     app = create_app(admin_password=os.environ.get("LAYA_ADMIN_PASSWORD") or None, warm=os.environ.get("LAYA_WARM", "1") == "1",
-                     check_hours=float(os.environ.get("LAYA_UPDATE_CHECK_HOURS", "6") or 0))
+                     check_hours=float(os.environ.get("LAYA_UPDATE_CHECK_HOURS", "6") or 0),
+                     cache_size=int(os.environ.get("LAYA_CACHE_SIZE", "256") or 0),
+                     sync_seconds=float(os.environ.get("LAYA_SYNC_SECONDS", "10") or 0))
     uvicorn.run(app, host=os.environ.get("LAYA_HOST", "127.0.0.1"), port=int(os.environ.get("LAYA_PORT", "9120")))
 
 

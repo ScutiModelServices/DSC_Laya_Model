@@ -172,3 +172,45 @@ def test_a_token_limited_to_projects_refuses_other_projects(tmp_path):
     assert c.post("/v1/ask", json=BODY, headers=use).status_code == 200  # no project is always allowed
     open_token = c.post("/admin/tokens", json={"name": "all"}, headers=admin).json()["token"]
     assert c.post("/v1/ask", json={**BODY, "project": "other"}, headers={"X-Internal-Token": open_token}).status_code == 200
+
+
+def test_rate_limit_edit_stats_and_metrics(tmp_path):
+    from tokens import TokenStore
+    store = TokenStore(tmp_path / "t.json")
+    c = TestClient(create_app(Registry(lambda checkpoint: FakeEngine()), "admin", tokens=store))
+    admin = {"X-Internal-Token": "admin"}
+    made = c.post("/admin/tokens", json={"name": "p", "rate": 1}, headers=admin).json()
+    assert made["rate"] == 1
+    use = {"X-Internal-Token": made["token"]}
+    assert c.post("/v1/ask", json=BODY, headers=use).status_code == 200
+    limited = c.post("/v1/ask", json=BODY, headers=use)
+    assert limited.status_code == 429 and int(limited.headers["Retry-After"]) >= 1
+    assert c.put(f"/admin/tokens/{made['id']}", json={"projects": ["a"], "rate": None}, headers=admin).status_code == 200
+    assert c.post("/v1/ask", json=BODY, headers=use).status_code == 200  # the limit is gone
+    assert c.put("/admin/tokens/nope", json={}, headers=admin).status_code == 404
+    row = store.list()[0]
+    assert row["projects"] == ["a"] and "rate" not in row and row["timed"] >= 1
+    assert c.get("/metrics").status_code == 401
+    assert 'laya_requests_total{token="p"}' in c.get("/metrics", headers=admin).text
+
+
+def test_identical_questions_are_answered_from_the_cache_until_the_weights_change():
+    calls = []
+
+    class Counting(FakeEngine):
+        def predict(self, text, questions, max_len):
+            calls.append(text)
+            return super().predict(text, questions, max_len)
+
+    registry = Registry(lambda checkpoint: Counting())
+    c = TestClient(create_app(registry, cache_size=2))
+    first = c.post("/v1/ask", json=BODY)
+    assert first.headers["X-Laya-Cache"] == "miss"
+    again = c.post("/v1/ask", json=BODY)
+    assert again.headers["X-Laya-Cache"] == "hit" and again.json() == first.json() and len(calls) == 1
+    c.post("/v1/ask", json={**BODY, "text": "other"})
+    c.post("/v1/ask", json={**BODY, "text": "third"})  # size 2: the first answer is gone
+    assert c.post("/v1/ask", json=BODY).headers["X-Laya-Cache"] == "miss"
+    registry.reload()
+    assert c.post("/v1/ask", json=BODY).headers["X-Laya-Cache"] == "miss"
+    assert "X-Laya-Cache" not in TestClient(create_app(Registry(lambda m: FakeEngine()))).post("/v1/ask", json=BODY).headers

@@ -13,7 +13,7 @@ class FakeEngine:
         return {}
 
 
-def make(cached="old", remote="new", package=("0.4.21", "0.4.21"), download=None, fail_remote=False):
+def make(cached="old", remote="new", package=("0.4.21", "0.4.21"), download=None, fail_remote=False, marker=None):
     """An Updates over a Registry of fake engines; `state` is the 'Hub', `downloaded` the repos fetched."""
     state = {"cached": cached}
     downloaded, loads = [], []
@@ -34,7 +34,7 @@ def make(cached="old", remote="new", package=("0.4.21", "0.4.21"), download=None
     registry = Registry(loader)
     updates = Updates(registry, latest_package=lambda: package[1], installed=lambda: package[0],
                       remote_sha=remote_sha, cached_sha=lambda repo: state["cached"], download=download or fetch,
-                      model_repos=lambda: ["org/laya"])
+                      model_repos=lambda: ["org/laya"], marker=marker)
     return updates, registry, downloaded, loads
 
 
@@ -118,3 +118,32 @@ def test_the_background_check_runs_at_start():
                 break
             time.sleep(0.02)
     assert updates.status()["checked_at"] is not None
+
+
+def test_other_replicas_reload_after_a_download(tmp_path):
+    marker = tmp_path / "volume" / "version"
+    one, registry_one, downloaded, loads_one = make(marker=marker)
+    two, registry_two, _, loads_two = make(marker=marker)
+    registry_one.predict(MODELS[0], None)
+    registry_two.predict(MODELS[0], None)
+    assert not two.sync()
+    note = one.update_weights()["reload_note"]
+    assert "other replicas" in note and downloaded == ["org/laya"]
+    assert one.sync() is False  # the replica that downloaded does not reload twice
+    assert loads_one == [MODELS[0], MODELS[0]]
+    assert two.sync() is True and loads_two == [MODELS[0], MODELS[0]]
+    assert two.sync() is False and registry_two.generation == 1
+
+
+def test_the_background_sync_reloads_a_replica(tmp_path):
+    marker = tmp_path / "version"
+    one, _, _, _ = make(marker=marker)
+    two, registry_two, _, loads_two = make(marker=marker)
+    registry_two.predict(MODELS[0], None)
+    with TestClient(create_app(registry_two, "secret", updates=two, sync_seconds=0.05)):
+        one.update_weights()
+        for _ in range(100):
+            if len(loads_two) == 2:
+                break
+            time.sleep(0.02)
+    assert loads_two == [MODELS[0], MODELS[0]]
