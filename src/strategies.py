@@ -19,6 +19,7 @@ A request's `min_confidence` replaces them all."""
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -48,18 +49,27 @@ class Session:
     """One request: asks each model at most once for the full question set, and again only for narrowed ones."""
 
     def __init__(self, registry: Registry, text: str, questions: dict[str, dict], max_len: int,
-                 tuning: Tuning) -> None:
+                 tuning: Tuning, project: str | None = None) -> None:
         self._registry, self._text, self._max_len = registry, text, max_len
         self.questions, self.tuning = questions, tuning
         self._cache: dict[str, dict[str, dict] | None] = {}
         self.failures: list[str] = []
         self.too_long = False
         self.calls: list[dict[str, Any]] = []
+        self.project = project
 
     def _call(self, name: str, questions: dict[str, dict]) -> dict[str, dict] | None:
+        # Fine-tuning targets typed-decisions; English always retains its base checkpoint.
+        selection = (self._registry.project_model(self.project) if name == TYPED
+                     else nullcontext((CHECKPOINT[name], False)))
+        with selection as (checkpoint, fallback):
+            return self._predict(name, checkpoint, fallback, questions)
+
+    def _predict(self, name: str, checkpoint: str, fallback: bool,
+                 questions: dict[str, dict]) -> dict[str, dict] | None:
         started, tokens = time.monotonic(), None
         try:
-            prediction = self._registry.predict(CHECKPOINT[name], (self._text, questions, self._max_len))
+            prediction = self._registry.predict(checkpoint, (self._text, questions, self._max_len))
             answers = normalize(questions, prediction)
             tokens = prediction["usage"].get("input_tokens")
             return answers
@@ -68,7 +78,8 @@ class Session:
             self.failures.append(f"{name}: {error}")
             return None
         finally:
-            self.calls.append({"model": CHECKPOINT[name], "input_tokens": tokens if isinstance(tokens, int) else None,
+            self.calls.append({"model": checkpoint, "fallback": fallback,
+                               "input_tokens": tokens if isinstance(tokens, int) else None,
                                "duration_ms": round((time.monotonic() - started) * 1000), "ok": tokens is not None})
 
     def ask(self, name: str, qid: str, spec: dict, narrowed: bool = False) -> dict | None:
@@ -347,18 +358,23 @@ def _compact(answer: dict) -> dict:
 
 
 def run(registry: Registry, strategy: str, text: str, questions: dict[str, dict], max_len: int,
-        tuning: Tuning = Tuning(), trace: bool = False) -> dict[str, Any]:
+        tuning: Tuning = Tuning(), trace: bool = False, project: str | None = None) -> dict[str, Any]:
     """Answer every question with the named strategy. Raises ValueError when no model could answer one.
     `calls` lists each model call made (checkpoint, tokens read, duration) for the caller's usage log."""
     settle = STRATEGIES[strategy]
-    session = Session(registry, text, questions, max_len, tuning)
+    session = Session(registry, text, questions, max_len, tuning, project)
     try:
         answers = {qid: settle(session, qid, spec) for qid, spec in questions.items()}
     except ValueError as error:
         error.calls = session.calls  # type: ignore[attr-defined]
         raise
+    bases = set(CHECKPOINT.values())
     return {
         "strategy": strategy,
+        "model": "+".join(dict.fromkeys(call["model"] for call in session.calls if call["ok"])),
+        "fallback": any(call["fallback"] for call in session.calls),
+        # False when the strategy never asked the typed model (english-only, or english was sure): the project went unused.
+        "project_used": any(call["ok"] and call["model"] not in bases for call in session.calls),
         "answers": answers if trace else {qid: _compact(a) for qid, a in answers.items()},
         "uncertain": any(a["uncertain"] for a in answers.values()),
         "calls": session.calls,
