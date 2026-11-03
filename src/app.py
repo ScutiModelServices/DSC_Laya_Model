@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Callable, Literal
 
 import anyio.to_thread
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
@@ -30,6 +30,7 @@ import strategies
 from answers import InputTooLong, check_questions
 from registry import PROJECT_PATTERN, ProjectBusy, Registry
 import settings
+from options import SETTINGS
 from tokens import TokenStore
 from updates import Updates, default_marker
 
@@ -61,6 +62,10 @@ class CombineRequest(BaseModel):
     options: list[str] | None = Field(None, min_length=2, max_length=10)
     prune_ratio: float = Field(strategies.PRUNE_RATIO, ge=0, lt=1)
     pair_ratio: float = Field(strategies.PAIR_RATIO, gt=0, le=1)
+
+
+class SettingsUpdate(BaseModel):
+    values: dict[str, Any]  # None resets an option to its environment variable or default
 
 
 class NewToken(BaseModel):
@@ -97,16 +102,17 @@ def _set_torch_threads(threads: int) -> None:
 
 def create_app(registry: Registry | None = None, admin_password: str | None = None, warm: bool = False,
                tokens: TokenStore | None = None, updates: Updates | None = None, check_hours: float = 0,
-               cache_size: int = 0, sync_seconds: float = 0) -> FastAPI:
+               cache_size: int = 0, sync_seconds: float = 0, config: settings.Config | None = None) -> FastAPI:
     """`admin_password` (LAYA_ADMIN_PASSWORD) unlocks /admin/, where each project gets a token of its own; when it
     is set, every call except /health must send one of those tokens in the X-Internal-Token header. Unset = no
     auth at all (local use only). `tokens` holds the project tokens (LAYA_TOKENS_FILE). `check_hours` > 0 looks for
     newer Laya releases that often (LAYA_UPDATE_CHECK_HOURS); it never downloads. `updates` is off with LAYA_OFFLINE=1.
     `cache_size` > 0 keeps that many answers per replica (LAYA_CACHE_SIZE); `sync_seconds` > 0 makes the replica look
-    that often for weights another replica downloaded (LAYA_SYNC_SECONDS)."""
+    that often for weights another replica downloaded (LAYA_SYNC_SECONDS). `config` (the admin page's settings) replaces
+    `warm`, `check_hours`, `cache_size` and `sync_seconds` and keeps them live; without it they stay fixed."""
     tokens = tokens or TokenStore(os.environ.get("LAYA_TOKENS_FILE", "tokens.json"))
     offline = os.environ.get("LAYA_OFFLINE") == "1"
-    registry = registry or Registry(offline=offline)
+    registry = registry or Registry(offline=offline, config=config)
     updates = None if offline else updates or Updates(registry, marker=default_marker())
     cache: OrderedDict[str, Any] = OrderedDict()  # shortcut: per replica, in memory; upgrade to a shared store if hit rate matters
 
@@ -114,32 +120,36 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         part = [body.model_dump(), registry.cache_part(body.project)]
         return hashlib.sha256(json.dumps(part, sort_keys=True, default=str).encode()).hexdigest()
 
-    async def sync_forever() -> None:
-        while True:
-            await anyio.sleep(sync_seconds)
-            try:
-                if await anyio.to_thread.run_sync(updates.sync):
-                    _log.info("Reloaded models: new weights were downloaded by another replica")
-            except Exception:
-                _log.exception("Weight sync failed")
+    def live(key: str, fixed: Any) -> Any:
+        return config.get(key) if config else fixed
 
-    async def check_forever() -> None:
+    async def every(seconds: Callable[[], float], job: Callable[[], Any], name: str) -> None:
+        """Runs `job` in a thread each time `seconds()` have passed (0 = off). The value is read again every second,
+        so a change on the admin page applies at once."""
+        last = None
         while True:
-            try:
-                await anyio.to_thread.run_sync(updates.check)
-            except Exception:
-                _log.exception("Update check failed")
-            await anyio.sleep(check_hours * 3600)
+            wait = seconds()
+            now = time.monotonic()
+            if wait > 0 and (last is None or now - last >= wait):
+                last = now
+                try:
+                    await anyio.to_thread.run_sync(job)
+                except Exception:
+                    _log.exception("%s failed", name)
+            await anyio.sleep(min(wait, 1.0) if wait > 0 else 1.0)
+
+    def sync_job() -> None:
+        if updates.sync():
+            _log.info("Reloaded models: new weights were downloaded by another replica")
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        if warm:
+        if live("warm", warm):
             await anyio.to_thread.run_sync(registry.warm)
         async with anyio.create_task_group() as background:
-            if updates and check_hours > 0:
-                background.start_soon(check_forever)
-            if updates and sync_seconds > 0:
-                background.start_soon(sync_forever)
+            if updates:
+                background.start_soon(every, lambda: live("update_check_hours", check_hours) * 3600, updates.check, "Update check")
+                background.start_soon(every, lambda: live("sync_seconds", sync_seconds), sync_job, "Weight sync")
             yield
             background.cancel_scope.cancel()
 
@@ -188,7 +198,10 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         def failure(status: int, error: ValueError) -> HTTPException:
             return HTTPException(status, {"message": str(error), "calls": getattr(error, "calls", [])})
 
-        key = cache_key(body) if cache_size else None
+        size = live("cache_size", cache_size)
+        if not size and cache:
+            cache.clear()
+        key = cache_key(body) if size else None
         if key in cache:
             cache.move_to_end(key)
             response.headers["X-Laya-Cache"] = "hit"
@@ -199,7 +212,7 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
             )
             if key:
                 cache[key] = result
-                while len(cache) > cache_size:
+                while len(cache) > size:
                     cache.popitem(last=False)
                 response.headers["X-Laya-Cache"] = "miss"
             return result
@@ -276,6 +289,22 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
     def create_token(body: NewToken) -> dict[str, Any]:
         return tokens.create(body.name.strip(), body.projects, body.rate, body.expires_days)
 
+    @app.get("/admin/settings", dependencies=[Depends(admin)])
+    def get_settings() -> dict[str, Any]:
+        return {"settings": config.describe() if config else []}
+
+    @app.put("/admin/settings", dependencies=[Depends(admin)])
+    def put_settings(body: SettingsUpdate) -> dict[str, Any]:
+        """Saves options; null resets one. Every replica reads the shared file, so a change applies everywhere within
+        a second, except options marked `restart`."""
+        if config is None:
+            raise HTTPException(409, "Settings are fixed in this setup")
+        try:
+            config.set(body.values)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from None
+        return {"settings": config.describe()}
+
     @app.put("/admin/tokens/{token_id}", dependencies=[Depends(admin)])
     def update_token(token_id: str, body: TokenScope) -> dict[str, bool]:
         if not tokens.update(token_id, body.projects, body.rate):
@@ -312,14 +341,13 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 def main() -> None:
     import uvicorn
 
-    saved = settings.load(TokenStore(os.environ.get("LAYA_TOKENS_FILE", "tokens.json")).settings_path)
+    store = TokenStore(os.environ.get("LAYA_TOKENS_FILE", "tokens.json"))
+    config = settings.Config(store.settings_path, SETTINGS)
+    saved = settings.load(store.settings_path)
     threads = saved.get("torch_threads") or os.environ.get("LAYA_TORCH_THREADS", "").strip()
     if threads:  # before the models load
         _set_torch_threads(int(threads))
-    app = create_app(admin_password=os.environ.get("LAYA_ADMIN_PASSWORD") or None, warm=os.environ.get("LAYA_WARM", "1") == "1",
-                     check_hours=float(os.environ.get("LAYA_UPDATE_CHECK_HOURS", "6") or 0),
-                     cache_size=int(os.environ.get("LAYA_CACHE_SIZE", "256") or 0),
-                     sync_seconds=float(os.environ.get("LAYA_SYNC_SECONDS", "10") or 0))
+    app = create_app(admin_password=os.environ.get("LAYA_ADMIN_PASSWORD") or None, tokens=store, config=config)
     uvicorn.run(app, host=os.environ.get("LAYA_HOST", "127.0.0.1"), port=int(os.environ.get("LAYA_PORT", "9120")))
 
 

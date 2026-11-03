@@ -11,14 +11,7 @@ services:
     restart: unless-stopped
     environment:
       LAYA_ADMIN_PASSWORD: ${LAYA_ADMIN_PASSWORD:-}
-      LAYA_WARM: "1"
-      LAYA_UPDATE_CHECK_HOURS: ${LAYA_UPDATE_CHECK_HOURS:-6}  # 0 = never check on its own
-      LAYA_SYNC_SECONDS: ${LAYA_SYNC_SECONDS:-10}  # how often a replica looks for weights another replica downloaded; 0 = off
-      LAYA_CACHE_SIZE: ${LAYA_CACHE_SIZE:-256}  # answers kept per replica for identical requests; 0 = off
       LAYA_TORCH_THREADS: ${LAYA_TORCH_THREADS:-}
-      LAYA_PROJECT_MODELS_DIR: ${LAYA_PROJECT_MODELS_DIR:-}  # empty = project checkpoints off
-      LAYA_MAX_PROJECT_MODELS: ${LAYA_MAX_PROJECT_MODELS:-2}
-      LAYA_PROJECT_WAIT_SECONDS: ${LAYA_PROJECT_WAIT_SECONDS:-30}
       LAYA_REPLICAS: ${LAYA_REPLICAS:-1}  # shown read-only on /admin/
     volumes:
       - models:/models

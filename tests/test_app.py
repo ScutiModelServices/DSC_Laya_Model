@@ -214,3 +214,32 @@ def test_identical_questions_are_answered_from_the_cache_until_the_weights_chang
     registry.reload()
     assert c.post("/v1/ask", json=BODY).headers["X-Laya-Cache"] == "miss"
     assert "X-Laya-Cache" not in TestClient(create_app(Registry(lambda m: FakeEngine()))).post("/v1/ask", json=BODY).headers
+
+
+def test_settings_are_admin_only_checked_and_apply_live(tmp_path):
+    from options import SETTINGS
+    from settings import Config
+    from tokens import TokenStore
+    config = Config(tmp_path / "s.json", SETTINGS)
+    registry = Registry(lambda checkpoint: FakeEngine(), config=config)
+    c = TestClient(create_app(registry, "admin", tokens=TokenStore(tmp_path / "t.json"), config=config))
+    admin = {"X-Internal-Token": "admin"}
+    assert c.get("/admin/settings").status_code == 401
+    rows = {row["key"]: row for row in c.get("/admin/settings", headers=admin).json()["settings"]}
+    assert rows["cache_size"]["value"] == 256 and rows["cache_size"]["source"] == "default"
+    use = {"X-Internal-Token": c.post("/admin/tokens", json={"name": "p"}, headers=admin).json()["token"]}
+    put = lambda values: c.put("/admin/settings", json={"values": values}, headers=admin)  # noqa: E731
+    assert put({"cache_size": 0}).status_code == 200
+    assert "X-Laya-Cache" not in c.post("/v1/ask", json=BODY, headers=use).headers
+    assert put({"cache_size": 4}).status_code == 200
+    assert c.post("/v1/ask", json=BODY, headers=use).headers["X-Laya-Cache"] == "miss"
+    assert c.post("/v1/ask", json=BODY, headers=use).headers["X-Laya-Cache"] == "hit"
+    assert put({"max_project_models": 1}).status_code == 200 and registry._project_cap == 1
+    bad = put({"max_project_models": 0})
+    assert bad.status_code == 422 and "between" in bad.json()["detail"]
+    assert put({"nope": 1}).status_code == 422
+    assert put({"max_project_models": None}).json()["settings"][3]["source"] == "default"
+    assert registry._project_cap == 2
+    fixed = TestClient(create_app(Registry(lambda checkpoint: FakeEngine()), "admin"))
+    assert fixed.get("/admin/settings", headers=admin).json() == {"settings": []}
+    assert fixed.put("/admin/settings", json={"values": {}}, headers=admin).status_code == 409

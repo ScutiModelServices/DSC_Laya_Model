@@ -69,21 +69,37 @@ class _ProjectEngine:
 class Registry:
     """`loader(checkpoint)` builds an engine with `predict(text, questions, max_len=)`; injectable for tests."""
 
-    def __init__(self, loader: Callable[[str], Any] | None = None, offline: bool = False) -> None:
+    def __init__(self, loader: Callable[[str], Any] | None = None, offline: bool = False, config: Any = None) -> None:
         self._loader = loader or (lambda checkpoint: _load_laya(checkpoint, offline))
         self._engines: dict[str, Any] = {}
         self.generation = 0  # bumped when the base weights are reloaded; part of the answer cache key
         self._locks = {model: threading.Lock() for model in MODELS}
-        root = os.environ.get("LAYA_PROJECT_MODELS_DIR")
-        self._project_root = Path(root).resolve() if root else None
-        self._project_cap = int(os.environ.get("LAYA_MAX_PROJECT_MODELS", "2"))
-        if self._project_cap < 1:
+        self._config = config  # with one, the admin page can change the project settings at any time
+        self._fixed = {"project_models_dir": os.environ.get("LAYA_PROJECT_MODELS_DIR") or "",
+                       "max_project_models": int(os.environ.get("LAYA_MAX_PROJECT_MODELS", "2")),
+                       "project_wait_seconds": float(os.environ.get("LAYA_PROJECT_WAIT_SECONDS", "30"))}
+        if config is None and self._fixed["max_project_models"] < 1:
             raise ValueError("LAYA_MAX_PROJECT_MODELS must be at least 1")
-        self._project_wait = float(os.environ.get("LAYA_PROJECT_WAIT_SECONDS", "30"))
-        if self._project_wait < 0:
+        if config is None and self._fixed["project_wait_seconds"] < 0:
             raise ValueError("LAYA_PROJECT_WAIT_SECONDS must not be negative")
         self._projects: OrderedDict[str, _ProjectEngine] = OrderedDict()
         self._project_guard = threading.Condition()
+
+    def _option(self, key: str) -> Any:
+        return self._config.get(key) if self._config else self._fixed[key]
+
+    @property
+    def _project_root(self) -> Path | None:
+        root = self._option("project_models_dir")
+        return Path(root).resolve() if root else None
+
+    @property
+    def _project_cap(self) -> int:
+        return self._option("max_project_models")
+
+    @property
+    def _project_wait(self) -> float:
+        return self._option("project_wait_seconds")
 
     def loaded_projects(self) -> dict[str, str]:
         """Project names and checkpoint paths currently resident in this replica."""
@@ -93,9 +109,9 @@ class Registry:
     def _project_checkpoint(self, project: str) -> str | None:
         if not re.fullmatch(PROJECT_PATTERN, project):
             raise ValueError("Invalid project name")
-        if self._project_root is None:
-            return None
         root = self._project_root
+        if root is None:
+            return None
         path = (root / project).resolve()
         # Directory aliases cannot create duplicate cache entries for one checkpoint.
         if path != root / project or not path.is_dir():

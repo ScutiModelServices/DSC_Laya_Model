@@ -147,3 +147,20 @@ def test_the_background_sync_reloads_a_replica(tmp_path):
                 break
             time.sleep(0.02)
     assert loads_two == [MODELS[0], MODELS[0]]
+
+
+def test_the_check_interval_can_change_while_running(tmp_path):
+    from options import SETTINGS
+    from settings import Config
+    config = Config(tmp_path / "s.json", SETTINGS)
+    config.set({"update_check_hours": 0, "sync_seconds": 0})
+    updates, registry, _, _ = make()
+    with TestClient(create_app(registry, "secret", updates=updates, config=config)):
+        time.sleep(0.3)
+        assert updates.status()["checked_at"] is None
+        config.set({"update_check_hours": 1})
+        for _ in range(300):  # the loop looks again every second
+            if updates.status()["checked_at"]:
+                break
+            time.sleep(0.02)
+    assert updates.status()["checked_at"] is not None

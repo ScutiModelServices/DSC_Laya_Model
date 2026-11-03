@@ -11,7 +11,12 @@ import uvicorn
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
+import os
+from pathlib import Path
+
 from app import create_app
+from options import SETTINGS
+from settings import Config
 from registry import Registry
 
 PASSWORD = "secret"
@@ -19,7 +24,9 @@ PASSWORD = "secret"
 
 @pytest.fixture
 def base_url():
-    app = create_app(Registry(lambda checkpoint: None), PASSWORD)
+    config = Config(Path(os.environ["LAYA_TOKENS_FILE"]).with_name("settings.json"), SETTINGS)
+    config.set({"update_check_hours": 0, "sync_seconds": 0, "warm": False})
+    app = create_app(Registry(lambda checkpoint: None, config=config), PASSWORD, config=config)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -104,3 +111,17 @@ def test_token_can_be_edited_and_shows_rate_and_expiry(page):
     page.click("#save-edit")
     sync_api.expect(row).to_contain_text("Only: app-a")
     sync_api.expect(row).not_to_contain_text("5/min")
+
+
+def test_settings_can_be_saved_and_reset(page):
+    page.fill("#admin", PASSWORD)
+    page.click("#signin-button")
+    sync_api.expect(page.locator("#settings-card")).to_be_visible()
+    box = page.locator("#setting-cache_size")
+    sync_api.expect(box).to_have_value("256")
+    box.fill("32")
+    page.click("#save-settings")
+    sync_api.expect(page.locator("#settings-note")).to_have_text("Saved")
+    sync_api.expect(page.locator("#setting-cache_size")).to_have_value("32")
+    page.get_by_role("button", name="Reset Answers kept per replica").click()
+    sync_api.expect(page.locator("#setting-cache_size")).to_have_value("256")

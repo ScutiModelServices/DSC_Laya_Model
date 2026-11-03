@@ -1,0 +1,17 @@
+"""The options the admin page can change. Each can still start from its environment variable; a saved value wins."""
+
+from settings import Setting
+
+SETTINGS = [
+    Setting("update_check_hours", "Check for updates every (hours)", "float", 6.0, "LAYA_UPDATE_CHECK_HOURS", 0, 720,
+            help="0 = only when you press Check now"),
+    Setting("sync_seconds", "Look for new weights every (seconds)", "float", 10.0, "LAYA_SYNC_SECONDS", 0, 3600,
+            help="Weights another replica downloaded. 0 = off"),
+    Setting("cache_size", "Answers kept per replica", "int", 256, "LAYA_CACHE_SIZE", 0, 100000,
+            help="For identical questions. 0 = off"),
+    Setting("max_project_models", "Project models loaded per replica", "int", 2, "LAYA_MAX_PROJECT_MODELS", 1, 64),
+    Setting("project_wait_seconds", "Wait for a free project slot (seconds)", "float", 30.0, "LAYA_PROJECT_WAIT_SECONDS", 0, 600),
+    Setting("project_models_dir", "Project models folder", "text", "", "LAYA_PROJECT_MODELS_DIR",
+            help="A folder inside the container. Empty = project models off"),
+    Setting("warm", "Load the models at start", "bool", True, "LAYA_WARM", restart=True),
+]

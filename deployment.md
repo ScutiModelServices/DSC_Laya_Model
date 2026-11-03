@@ -156,3 +156,7 @@ The **Updates** card shows the installed `laya` package and each weights reposit
 A plain publish (`tools\deploy.bat` option 1) only updates the `live` branch, so it is fine for test deploys. A release is a separate step: set `VERSION` (and `pyproject.toml` where it has a version, to the same number), commit, then run `tools\deploy.bat` option R or `py tools\publish_live.py --release`. That publishes to `live` and tags the `main` commit `vX.Y.Z` and the live commit `live-vX.Y.Z`. A version already released with different live files is refused, so bump `VERSION`. While a version is not officially released yet, add `--replace` to move its tags.
 
 `tools\make_zip.bat` then builds `zip_versions\LayaModel-<VERSION>.zip` (no `tools/`, no git-ignored files, no older ZIPs; `.env.example` is included) and opens GitHub's new-release page for the tag.
+
+## Settings on the admin page
+
+These are edited on the **Settings** card of `/admin/` and saved in `settings.json` beside the tokens, so all replicas share them: `LAYA_UPDATE_CHECK_HOURS`, `LAYA_SYNC_SECONDS`, `LAYA_CACHE_SIZE`, `LAYA_MAX_PROJECT_MODELS`, `LAYA_PROJECT_WAIT_SECONDS`, `LAYA_PROJECT_MODELS_DIR` and `LAYA_WARM` (the last is read at start). A saved value beats the environment variable. The compose file no longer passes them, so a `.env` value only applies if you add the variable under `environment:` of `laya`. Still in `.env`: `LAYA_ADMIN_PASSWORD`, `LAYA_PORT`, `LAYA_REPLICAS`, `LAYA_TORCH_THREADS` (a starting value for the CPU threads card) and `LAYA_OFFLINE`.
