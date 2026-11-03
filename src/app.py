@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 import strategies
 from answers import InputTooLong, check_questions
-from registry import Registry
+from registry import PROJECT_PATTERN, ProjectBusy, Registry
 import settings
 from tokens import TokenStore
 from updates import Updates
@@ -34,6 +34,7 @@ _Thresholds = dict[Literal["2", "3+"], dict[Literal["laya-english", "laya-typed"
 
 
 class AskRequest(BaseModel):
+    project: str | None = Field(None, pattern=PROJECT_PATTERN)
     strategy: StrategyName = strategies.DEFAULT_STRATEGY
     text: str = Field(min_length=1, max_length=100_000)
     questions: dict[str, Any]
@@ -122,7 +123,8 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
     @app.get("/health")
     def health() -> dict[str, Any]:
         models = registry.loaded()
-        return {"status": "ok", "ready": all(models.values()), "models": models, "torch_threads": _torch_threads()}
+        return {"status": "ok", "ready": all(models.values()), "models": models,
+                "project_models": registry.loaded_projects(), "torch_threads": _torch_threads()}
 
     @app.get("/v1/strategies")
     def list_strategies() -> dict[str, Any]:
@@ -141,12 +143,14 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 
         try:
             return await anyio.to_thread.run_sync(
-                strategies.run, registry, body.strategy, body.text, body.questions, body.max_len, tuning, body.trace,
+                strategies.run, registry, body.strategy, body.text, body.questions, body.max_len, tuning, body.trace, body.project,
             )
         except InputTooLong as error:
             raise failure(413, error) from None
         except ValueError as error:
             raise failure(502, error) from None
+        except ProjectBusy as error:
+            raise HTTPException(503, str(error), headers={"Retry-After": "5"}) from None
         except Exception:
             _log.exception("Laya strategy failed")
             raise HTTPException(500, "Laya could not answer") from None

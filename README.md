@@ -7,19 +7,45 @@ typed questions over HTTP instead of loading the models themselves.
 
 | Call | Purpose |
 |---|---|
-| `POST /v1/ask` | `{"strategy", "text", "questions", "max_len", "min_confidence", "thresholds", "prune_ratio", "pair_ratio", "trace"}` → `{"strategy", "answers", "uncertain", "calls"}`. Callers pick a strategy, never a model. |
+| `POST /v1/ask` | `{"strategy", "project", "text", "questions", "max_len", "min_confidence", "thresholds", "prune_ratio", "pair_ratio", "trace"}` → `{"strategy", "model", "fallback", "project_used", "answers", "uncertain", "calls"}`. Callers pick a strategy and optionally a project. |
 | `GET /v1/strategies` | The strategy names and the default (`auto`). |
 | `POST /v1/validate` | `{"questions"}` → `{"ok": true}`, or 422 with what is wrong. The one definition of a valid question set (types, `criteria` shapes, 2 to 10 options, 1 to 8 questions); `/v1/ask` applies it too. Callers check their questions here instead of keeping a copy of the rules. |
 | `POST /v1/combine` | `{"voters", "options", "prune_ratio", "pair_ratio"}` → the voters over `options` (renormalised), their `average`, the `kept` options and, with two voters or more, the pairwise `final` comparison. For a caller that adds its own voter (Garrison's cloud fallback, Jev) to the local models. |
-| `GET /health` | `{"status": "ok", "models": {name: loaded}}`. No token needed. |
+| `GET /health` | `{"status": "ok", "models": {name: loaded}, "project_models": {project: checkpoint_path}, ...}`. No token needed; `ready` still requires both base models. |
 
 When `LAYA_ADMIN_PASSWORD` is set, send a project token (made on `/admin/`) as `X-Internal-Token`. Errors: 422 bad request or question, 413 text longer
 than the window, 502 no model could answer, 500 anything else. A 413 or 502 body is
 `{"detail": {"message", "calls"}}`, so the caller can still log the model calls that were made.
 
-`calls` lists each model call of a request (`model`, `input_tokens`, `duration_ms`, `ok`) for usage logs.
+`calls` lists each model call of a request (`model`, `fallback`, `input_tokens`, `duration_ms`, `ok`) for usage logs.
 `trace: true` adds `rounds`, and for a choice question the service could not settle it also returns `options` and
 `voters` (each model's latest answer), which is what `/v1/combine` continues from.
+
+### Project checkpoints
+
+Training happens elsewhere. Copy a finished typed-decisions checkpoint into
+`<LAYA_PROJECT_MODELS_DIR>/<project>/`. Set `LAYA_PROJECT_MODELS_DIR` to enable local project models;
+unset or empty disables them. The directory must contain `rl_agent_config.json`, `model.safetensors`,
+`encoder/config.json` and `tokenizer/tokenizer.json` and be loadable by `laya.load(path)`.
+
+Send `"project": "garrison"` with `/v1/ask`. Names must match `^[a-z0-9][a-z0-9_-]{0,47}$`;
+invalid names (including empty strings) return 422. An absent project keeps the base engines. A missing or
+incomplete artifact uses base typed-decisions with `fallback: true`; no arbitrary Hub model can be requested.
+Directory aliases and required-file symlinks escaping the configured root are treated as missing artifacts.
+
+A project checkpoint replaces **TYPED only**, because fine-tuning targets typed-decisions. English remains
+`convaiinnovations/laya` in every strategy. Each call reports its actual checkpoint in `model`; the response's
+`model` joins distinct successful checkpoints with `+` when a strategy uses both. `fallback` is true if a TYPED call
+requested a project but used the base checkpoint. English calls and requests without a project report false.
+`project_used` is true only when a project checkpoint answered; it stays false if the strategy never asked the typed
+model (`english-only`, or English was sure), so a caller can tell the project was not consulted.
+
+`LAYA_MAX_PROJECT_MODELS` (default `2`, minimum `1`) bounds resident project engines per replica using LRU.
+Busy engines are not evicted; if all slots stay busy a request waits up to `LAYA_PROJECT_WAIT_SECONDS` (default `30`),
+then gets `503` with `Retry-After: 5`. Both base engines stay outside this cap.
+`/health` lists resident project names and paths in `project_models`. **Download new weights** remains Hub-only:
+it neither changes nor reloads local project checkpoints. Restart replicas after replacing a resident artifact.
+See [deployment.md](deployment.md) for copying checkpoints into the shared volume.
 
 ### Strategies
 

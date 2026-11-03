@@ -30,9 +30,25 @@ uv run python src/app.py
 | `LAYA_WARM` | `1` | Load both models at start. |
 | `LAYA_TORCH_THREADS` | torch decides | CPU thread cap. |
 | `LAYA_OFFLINE` | unset | `1` uses only downloaded weights. |
+| `LAYA_PROJECT_MODELS_DIR` | unset | Root containing finished `<project>/` checkpoints; empty disables them. |
+| `LAYA_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines (minimum `1`); base engines stay separate. |
+| `LAYA_PROJECT_WAIT_SECONDS` | `30` | Wait for a free project slot before answering `503`. |
 
 PowerShell: `$env:LAYA_ADMIN_PASSWORD = "secret"; .\run.bat`
 Bash: `LAYA_ADMIN_PASSWORD=secret python src/app.py`
+
+## Project checkpoints
+
+Train typed-decisions elsewhere, then copy the complete checkpoint to, for example, `D:/models/garrison/`.
+Set `$env:LAYA_PROJECT_MODELS_DIR = "D:/models"` in PowerShell before starting; Bash uses
+`LAYA_PROJECT_MODELS_DIR=/path/to/models uv run python src/app.py`.
+The [required checkpoint files](../README.md#project-checkpoints) must be present; no model downloads are made
+for projects, even with `LAYA_OFFLINE=1`.
+
+Send `"project": "garrison"` with `/v1/ask`. Names match `^[a-z0-9][a-z0-9_-]{0,47}$` (otherwise 422).
+Only TYPED uses the project checkpoint; English stays base. Missing artifacts fall back; responses and usage
+calls report `model` and `fallback`. `/health` lists loaded `project_models`. Restart after replacing a loaded
+checkpoint; **Download new weights** only handles Hub models.
 
 ## Check
 ```bash

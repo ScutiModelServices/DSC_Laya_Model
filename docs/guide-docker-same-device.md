@@ -30,6 +30,23 @@ Run the service in Docker on the machine you work on (your PC), so other program
    - Caller in another Docker stack on the same host: `http://host.docker.internal:9120`.
    - Citadel: set `LAYA_SERVICE_URL` and `LAYA_TOKEN` on the Citadel side.
 
+## Project checkpoints
+
+Set `LAYA_PROJECT_MODELS_DIR=/models/projects` in Compose's `.env` to enable finished local typed-decisions
+checkpoints. Leave it unset to disable project loading. Copy each complete directory into the shared volume:
+
+```bash
+docker compose up -d --build
+docker compose exec laya mkdir -p /models/projects
+docker compose cp ./garrison laya:/models/projects/garrison
+```
+
+Send `"project": "garrison"` with `/v1/ask`. Names match `^[a-z0-9][a-z0-9_-]{0,47}$` (otherwise 422).
+Only TYPED changes; English stays base. Missing artifacts fall back; `model`, `fallback` and `project_used` report the selection.
+`LAYA_MAX_PROJECT_MODELS=2` caps resident project engines per replica; base engines stay loaded separately.
+See [checkpoint requirements](../README.md#project-checkpoints). `/health` lists loaded `project_models`.
+Hub weight downloads leave local artifacts alone; restart after replacing one already loaded.
+
 ## Daily use
 ```bash
 docker compose ps          # state

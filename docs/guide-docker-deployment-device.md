@@ -50,6 +50,24 @@ First start downloads weights into the `models` volume; `laya_lb` waits for a he
    - Citadel: set `LAYA_SERVICE_URL` and `LAYA_TOKEN` on the Citadel side, then run `docker compose up -d` there
      (not `restart`; `restart` does not reload `env_file`).
 
+## Project checkpoints
+
+Train typed-decisions on your PC and transfer the complete project directory to the deployment host.
+Set `LAYA_PROJECT_MODELS_DIR=/models/projects` in the host's Compose `.env` (unset = off), recreate containers,
+then copy the directory into the shared volume:
+
+```bash
+docker compose up -d --build
+docker compose exec laya mkdir -p /models/projects
+docker compose cp ./garrison laya:/models/projects/garrison
+```
+
+See [required files](../README.md#project-checkpoints). Send `"project": "garrison"` with `/v1/ask`;
+names match `^[a-z0-9][a-z0-9_-]{0,47}$` or return 422. A project replaces only TYPED; English stays base.
+Missing artifacts fall back; `model`, `fallback` and `project_used` report actual selection. `LAYA_MAX_PROJECT_MODELS` defaults
+to `2` per replica, on top of the base engines. `/health` lists resident `project_models`.
+Hub weight downloads never touch local artifacts. Restart replicas after replacing a loaded checkpoint.
+
 ## Updating
 ```bash
 cd /media/ZimaOS-HD/Apps/LayaModel

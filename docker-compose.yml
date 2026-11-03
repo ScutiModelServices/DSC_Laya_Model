@@ -14,6 +14,9 @@ services:
       LAYA_WARM: "1"
       LAYA_UPDATE_CHECK_HOURS: ${LAYA_UPDATE_CHECK_HOURS:-6}  # 0 = never check on its own
       LAYA_TORCH_THREADS: ${LAYA_TORCH_THREADS:-}
+      LAYA_PROJECT_MODELS_DIR: ${LAYA_PROJECT_MODELS_DIR:-}  # empty = project checkpoints off
+      LAYA_MAX_PROJECT_MODELS: ${LAYA_MAX_PROJECT_MODELS:-2}
+      LAYA_PROJECT_WAIT_SECONDS: ${LAYA_PROJECT_WAIT_SECONDS:-30}
       LAYA_REPLICAS: ${LAYA_REPLICAS:-1}  # shown read-only on /admin/
     volumes:
       - models:/models

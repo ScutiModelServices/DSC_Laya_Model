@@ -30,6 +30,9 @@ There are two ways to run it. Pick one: both use host port 9120.
 | `LAYA_TORCH_THREADS` | torch decides | Cap on torch CPU threads; `/health` reports the value in use, `/admin/` can change it and saves the value (other replicas apply it on restart). |
 | `LAYA_UPDATE_CHECK_HOURS` | `6` | How often each replica looks for a newer `laya` package (PyPI) and newer weights (Hugging Face). It only reports; `0` turns the timer off. Off too with `LAYA_OFFLINE=1`. |
 | `LAYA_OFFLINE` | unset | `1` uses only already-downloaded weights. Neither compose file passes it: add it under `environment:` of `laya` to use it. |
+| `LAYA_PROJECT_MODELS_DIR` | unset | Local project-checkpoint root; empty disables it. With Docker use `/models/projects` inside the shared `models` volume. |
+| `LAYA_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines per replica (minimum `1`); LRU evicts idle engines only. Base models are never evicted. |
+| `LAYA_PROJECT_WAIT_SECONDS` | `30` | How long a request waits for a free project slot before a `503` with `Retry-After: 5`. |
 
 Put the variables in a `.env` next to the compose file that runs the stack (this folder, or `Citadel/`).
 
@@ -82,6 +85,31 @@ A 422 means the service is up and checking requests (an empty question set is in
 `LAYA_ADMIN_PASSWORD` is empty.
 
 ## Scaling
+
+### Local project checkpoints
+
+Train typed-decisions elsewhere and copy the complete checkpoint directory to the host. With the standalone
+stack, set `LAYA_PROJECT_MODELS_DIR=/models/projects` and optionally `LAYA_MAX_PROJECT_MODELS=2` in Compose's
+`.env`, then recreate the service. Copy a project directory into the existing shared volume:
+
+```bash
+docker compose up -d --build
+docker compose exec laya mkdir -p /models/projects
+docker compose cp ./garrison laya:/models/projects/garrison
+```
+
+The checkpoint needs `rl_agent_config.json`, `model.safetensors`, `encoder/config.json` and
+`tokenizer/tokenizer.json`, plus anything else its `laya.load(path)` requires. Publish complete directories before
+sending traffic. All replicas see the same files but each has its own RAM cap. For a stack owned elsewhere,
+pass these environment settings to its `laya` service and reuse its existing models volume.
+
+Call `/v1/ask` with `"project": "garrison"`. Only TYPED is replaced; English keeps its base engine. Invalid names
+return 422; absent or incomplete artifacts fall back to base typed-decisions. `model` and `fallback` appear in
+the response and each usage-log call. `/health` adds `project_models`; base-model `ready` is unchanged.
+Omitting the root disables project loading, including in offline mode. Hub weight updates never touch these
+artifacts. Restart replicas after replacing an already loaded project checkpoint.
+
+### Replica count
 
 ```bash
 LAYA_REPLICAS=3 docker compose up -d --build
