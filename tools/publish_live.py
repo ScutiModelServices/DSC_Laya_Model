@@ -32,6 +32,7 @@ DEPLOY_PATHS = [
     "VERSION",
     "nginx.conf",
     "pyproject.toml",
+    "uv.lock",  # the Dockerfile copies it: `uv sync --frozen`
     "src",
     "web",
     "deployment.md",
