@@ -55,13 +55,13 @@ are enforced only while `LAYA_ADMIN_PASSWORD` is set.
 ## Torch CPU threads
 Use the synchronized slider or number field, then **Apply**. Both accept 1 to 256. Apply is disabled and
 shows a busy indicator during saving; a short **Saved** confirmation follows. The page states:
-“Saved to settings.json. Other replicas apply it on restart.”
+“Saved to settings.json. Other replicas apply it within a few seconds.”
 - Sets how many CPU threads torch uses for each prediction. In a container with a CPU quota torch still counts the
   host's cores, and more threads than the quota makes each prediction several times slower. Start near the number
   of cores the container may use.
 - Range 1 to 256. The field shows the value in use now.
 - The change applies at once to the replica that answers the click and is saved to `settings.json` next to
-  `tokens.json`. Other replicas pick it up when they restart: `docker compose restart laya`.
+  `tokens.json`. Other replicas pick it up within a few seconds; no restart is needed.
 - The saved value beats `LAYA_TORCH_THREADS` from `.env`. Remove `settings.json` from the `/data` volume to go back
   to the `.env` value.
 - `GET /health` reports the value in use as `torch_threads`.
@@ -82,7 +82,7 @@ docker compose restart laya_lb
 | `Wrong admin password` | Password differs from `LAYA_ADMIN_PASSWORD` in the running container. Recreate it after editing `.env`. |
 | `Admin password required (set LAYA_ADMIN_PASSWORD)` | The password is empty. Set it and restart. |
 | Token lost | Revoke it and create a new one. |
-| Thread change gone after restart | Other replicas load the saved value only on restart; check `/health` on each. |
+| Thread change not on every replica | Replicas read the saved value every second from the shared `/data` volume; check `torch_threads` in `/health` on each. |
 | Page works over plain `http` only | Expected on a LAN. Never expose port 9120 to the internet. |
 
 ## Limiting a token to projects
