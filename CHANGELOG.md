@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Tokens can be limited to a list of projects (set on the admin page when creating one). Another project is `403`; no `project` is always allowed.
+
 ## 1.1.0
 
 - Optional validated `project` on `/v1/ask` serves local typed-decisions checkpoints; English stays base.

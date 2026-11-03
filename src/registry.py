@@ -43,6 +43,14 @@ def _load_laya(checkpoint: str, offline: bool) -> Any:
     return laya.load(cached_checkpoint(checkpoint) if offline and checkpoint in MODELS else checkpoint)
 
 
+def _stamp(checkpoint: str) -> tuple:
+    """Modification times of the checkpoint files; replacing a file changes it."""
+    try:
+        return tuple((Path(checkpoint) / name).stat().st_mtime_ns for name in _REQUIRED_FILES)
+    except OSError:
+        return ()
+
+
 class ProjectBusy(RuntimeError):
     """Every project slot is in use and none freed within LAYA_PROJECT_WAIT_SECONDS."""
 
@@ -55,6 +63,7 @@ class _ProjectEngine:
     engine: Any
     lock: Any = field(default_factory=threading.Lock)
     users: int = 0
+    stamp: tuple = ()  # file mtimes when the engine was loaded
 
 
 class Registry:
@@ -107,6 +116,7 @@ class Registry:
         if checkpoint is None:
             yield MODELS[1], project is not None
             return
+        stamp = _stamp(checkpoint)
         deadline = time.monotonic() + self._project_wait
         with self._project_guard:
             while project not in self._projects and len(self._projects) >= self._project_cap:
@@ -119,8 +129,10 @@ class Registry:
                     del self._projects[idle]
             entry = self._projects.get(project)
             if entry is None:
-                entry = _ProjectEngine(checkpoint, None)
+                entry = _ProjectEngine(checkpoint, None, stamp=stamp)
                 self._projects[project] = entry
+            elif not entry.users and entry.stamp != stamp:
+                entry.engine, entry.stamp = None, stamp  # files were replaced: load the new ones on this lease
             entry.users += 1
             self._projects.move_to_end(project)
         try:

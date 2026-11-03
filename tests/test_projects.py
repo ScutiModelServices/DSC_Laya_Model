@@ -1,5 +1,6 @@
 """Project routing uses local artifacts without changing the base strategy engines."""
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
@@ -198,3 +199,22 @@ def test_negative_wait_is_refused(monkeypatch):
     monkeypatch.setenv("LAYA_PROJECT_WAIT_SECONDS", "-1")
     with pytest.raises(ValueError):
         Registry(lambda model: FakeEngine())
+
+
+def test_replaced_checkpoint_files_are_loaded_again_once_idle(tmp_path, monkeypatch):
+    path = checkpoint(tmp_path, "demo")
+    weights = tmp_path / "demo" / "model.safetensors"
+    registry, _, loads = configured(tmp_path, monkeypatch)
+    call = ("hi", {}, 16)
+    predict_project(registry, "demo", call)
+    predict_project(registry, "demo", call)
+    assert loads == [path]  # unchanged files: one load
+    os.utime(weights, ns=(10**9, 10**9))
+    with registry.project_model("demo") as (model, _):  # replaced while in use: the leased engine stays
+        registry.predict(model, call)
+        os.utime(weights, ns=(2 * 10**9, 2 * 10**9))
+        with registry.project_model("demo") as (again, _):
+            registry.predict(again, call)
+    assert loads == [path, path]  # reloaded by the lease that found it idle after the first utime
+    predict_project(registry, "demo", call)
+    assert loads == [path, path, path]  # the second replacement is picked up once nothing holds it

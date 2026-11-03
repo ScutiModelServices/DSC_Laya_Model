@@ -84,3 +84,7 @@ docker compose restart laya_lb
 | Token lost | Revoke it and create a new one. |
 | Thread change gone after restart | Other replicas load the saved value only on restart; check `/health` on each. |
 | Page works over plain `http` only | Expected on a LAN. Never expose port 9120 to the internet. |
+
+## Limiting a token to projects
+
+When you create a token you can list the projects it may use (comma separated; empty = all). A request whose `project` is not on the list is refused with `403`. A request without `project` is always allowed. The list cannot be edited later: revoke the token and create a new one.

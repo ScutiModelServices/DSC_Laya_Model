@@ -71,3 +71,16 @@ def test_health_keeps_backend_specific_model_display(page):
     page.click("#signin-button")
     sync_api.expect(page.locator("#model-value")).to_have_text("0 / 2")
     sync_api.expect(page.locator("#health-text")).to_have_text("Healthy")
+
+
+def test_token_can_be_limited_to_projects(page):
+    page.fill("#admin", PASSWORD)
+    page.click("#signin-button")
+    sync_api.expect(page.locator("#dashboard")).to_be_visible()
+    page.fill("#name", "Garrison")
+    page.fill("#projects", "Bad Name")
+    page.click("#create-button")
+    sync_api.expect(page.locator("#token-error")).to_contain_text("not valid")
+    page.fill("#projects", "app-a, app-b")
+    page.click("#create-button")
+    sync_api.expect(page.locator("#rows tr")).to_contain_text("Only: app-a, app-b")

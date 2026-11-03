@@ -13,7 +13,7 @@ import logging
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import anyio.to_thread
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -59,6 +59,7 @@ class CombineRequest(BaseModel):
 
 class NewToken(BaseModel):
     name: str = Field(min_length=1, max_length=64)
+    projects: list[Annotated[str, Field(pattern=PROJECT_PATTERN)]] | None = Field(None, max_length=32)
 
 
 class Threads(BaseModel):
@@ -110,9 +111,18 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
             yield
             background.cancel_scope.cancel()
 
-    def authorize(x_internal_token: str = Header("")) -> None:
-        if admin_password and not tokens.valid(x_internal_token):
+    def authorize(x_internal_token: str = Header("")) -> list[str] | None:
+        """The projects the token is limited to, or None for all. Unset admin password = no auth."""
+        if not admin_password:
+            return None
+        row = tokens.lookup(x_internal_token)
+        if row is None:
             raise HTTPException(401, "Invalid token")
+        return row.get("projects")
+
+    def check_scope(allowed: list[str] | None, project: str | None) -> None:
+        if project is not None and allowed is not None and project not in allowed:
+            raise HTTPException(403, f"This token may not use project {project!r}")
 
     def admin(x_internal_token: str = Header("")) -> None:
         if not admin_password or not hmac.compare_digest(x_internal_token, admin_password):
@@ -130,8 +140,9 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
     def list_strategies() -> dict[str, Any]:
         return {"default": strategies.DEFAULT_STRATEGY, "strategies": list(strategies.STRATEGIES)}
 
-    @app.post("/v1/ask", dependencies=[Depends(authorize)])
-    async def ask(body: AskRequest) -> Any:
+    @app.post("/v1/ask")
+    async def ask(body: AskRequest, allowed: list[str] | None = Depends(authorize)) -> Any:
+        check_scope(allowed, body.project)
         try:
             check_questions(body.questions)
         except ValueError as error:
@@ -216,7 +227,7 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 
     @app.post("/admin/tokens", dependencies=[Depends(admin)])
     def create_token(body: NewToken) -> dict[str, Any]:
-        return tokens.create(body.name.strip())
+        return tokens.create(body.name.strip(), body.projects)
 
     @app.delete("/admin/tokens/{token_id}", dependencies=[Depends(admin)])
     def revoke_token(token_id: str) -> dict[str, bool]:
