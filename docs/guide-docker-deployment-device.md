@@ -19,7 +19,7 @@ Run `LayaModel\tools\deploy.bat`. Menu:
 | 4, 5 | Dry runs |
 | 6 | chown helper, if option 2 says `Permission denied` |
 
-Override the target with `DEPLOY_HOST`, `DEPLOY_DIR`, `DEPLOY_WEB_PORT` before running. Commit `main` first: publish
+Keep your own target in the git-ignored `tools\deploy.local.bat` (copy `tools\deploy.local.example.bat`), or override it with `DEPLOY_HOST`, `DEPLOY_DIR`, `DEPLOY_WEB_PORT` before running. Commit `main` first: publish
 reads committed `main`.
 
 ## 2. First-time setup on the box
