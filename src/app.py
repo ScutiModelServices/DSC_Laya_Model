@@ -121,7 +121,8 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok", "models": registry.loaded(), "torch_threads": _torch_threads()}
+        models = registry.loaded()
+        return {"status": "ok", "ready": all(models.values()), "models": models, "torch_threads": _torch_threads()}
 
     @app.get("/v1/strategies")
     def list_strategies() -> dict[str, Any]:

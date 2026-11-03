@@ -64,3 +64,10 @@ def test_create_and_revoke_a_token(page):
     row.get_by_role("button", name="Revoke").click()
     page.click("#confirm-revoke")
     sync_api.expect(page.locator("#empty")).to_be_visible()
+
+
+def test_health_keeps_backend_specific_model_display(page):
+    page.fill("#admin", PASSWORD)
+    page.click("#signin-button")
+    sync_api.expect(page.locator("#model-value")).to_have_text("0 / 2")
+    sync_api.expect(page.locator("#health-text")).to_have_text("Healthy")

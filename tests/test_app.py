@@ -128,3 +128,31 @@ def test_workers_are_read_only_and_admin_only(monkeypatch):
     assert c.get("/admin/workers").status_code == 401
     assert c.get("/admin/workers", headers={"X-Internal-Token": "admin"}).json() == {"replicas": 3}
     assert c.put("/admin/workers", json={"replicas": 5}, headers={"X-Internal-Token": "admin"}).status_code == 405
+
+
+def test_main_prefers_saved_threads_over_environment(tmp_path, monkeypatch):
+    import app
+    import settings
+    from tokens import TokenStore
+    store = TokenStore(tmp_path / "tokens.json")
+    settings.save(store.settings_path, torch_threads=7)
+    monkeypatch.setenv("LAYA_TOKENS_FILE", str(tmp_path / "tokens.json"))
+    monkeypatch.setenv("LAYA_TORCH_THREADS", "2")
+    seen = []
+    monkeypatch.setattr(app, "_set_torch_threads", seen.append)
+    monkeypatch.setattr(app, "create_app", lambda **kw: object())
+    monkeypatch.setattr("uvicorn.run", lambda *args, **kw: None)
+    app.main()
+    assert seen == [7]
+
+
+def test_health_ready_requires_all_models():
+    registry = Registry(lambda checkpoint: FakeEngine())
+    http = TestClient(create_app(registry))
+    assert http.get("/health").json()["ready"] is False
+    registry.predict(registry.models[0], None)
+    assert http.get("/health").json()["ready"] is False
+    registry.warm()
+    body = http.get("/health").json()
+    assert body["ready"] is True
+    assert body["status"] == "ok" and all(body["models"].values())
