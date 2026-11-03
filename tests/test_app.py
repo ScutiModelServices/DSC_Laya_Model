@@ -264,3 +264,74 @@ def test_a_saved_thread_count_reaches_other_replicas(tmp_path, monkeypatch):
                 break
             time.sleep(0.02)
     assert seen and set(seen) == {5}
+
+
+MULTI = {**BODY, "questions": {"q1": {"type": "noul", "instructions": "x"}, "q2": {"type": "noul", "instructions": "y"}}}
+
+
+class FakeMulti:
+    def predict(self, text, questions, max_len):
+        return {"answers": {qid: {"noul": 0.5, "answer_confidence": 0.9} for qid in questions}, "usage": {"input_tokens": len(text)}}
+
+
+def multi_client(**options):
+    return TestClient(create_app(Registry(lambda checkpoint: FakeMulti()), **options))
+
+
+def events(reply):
+    import json
+    return [json.loads(text) for text in reply.text.splitlines()]
+
+
+def test_stream_sends_each_answer_then_the_same_body_as_a_call_without_stream():
+    c = multi_client()
+    reply = c.post("/v1/ask", json={**MULTI, "stream": True})
+    assert reply.status_code == 200 and reply.headers["content-type"].startswith("application/x-ndjson")
+    sent = events(reply)
+    assert [(e["type"], e.get("id")) for e in sent] == [("answer", "q1"), ("answer", "q2"), ("done", None)]
+    plain = c.post("/v1/ask", json=MULTI).json()
+    done = {k: v for k, v in sent[-1].items() if k != "type"}
+    assert done["answers"] == plain["answers"] and done["strategy"] == plain["strategy"] and done["uncertain"] == plain["uncertain"]
+    assert {e["id"]: e["answer"] for e in sent[:-1]} == plain["answers"]
+
+
+def test_stream_with_trace_sends_the_full_answers():
+    sent = events(multi_client().post("/v1/ask", json={**MULTI, "stream": True, "trace": True}))
+    assert "answer_confidence" in sent[0]["answer"] and sent[-1]["answers"]["q1"] == sent[0]["answer"]
+
+
+def test_stream_errors_before_the_first_answer_are_http_errors_and_later_ones_are_error_lines(monkeypatch):
+    class Cut:
+        def predict(self, *args, **kwargs):
+            return {"answers": {}, "usage": {"truncated": True, "input_tokens": 9}}
+
+    refused = TestClient(create_app(Registry(lambda m: Cut()))).post("/v1/ask", json={**MULTI, "stream": True})
+    assert refused.status_code == 413 and refused.json()["detail"]["calls"][0]["ok"] is False
+
+    import strategies
+
+    def broken(*args, **kwargs):
+        yield "answer", ("q1", {"type": "noul"})
+        raise ValueError("the second model failed")
+
+    monkeypatch.setattr(strategies, "run_iter", broken)
+    sent = events(multi_client().post("/v1/ask", json={**MULTI, "stream": True}))
+    assert sent[0]["type"] == "answer" and sent[-1] == {"type": "error", "status": 502, "detail": {"message": "the second model failed", "calls": []}}
+
+
+def test_stream_fills_the_cache_and_a_kept_answer_streams_back():
+    calls = []
+
+    class Counting(FakeMulti):
+        def predict(self, text, questions, max_len):
+            calls.append(text)
+            return super().predict(text, questions, max_len)
+
+    c = TestClient(create_app(Registry(lambda checkpoint: Counting()), cache_size=4))
+    streamed = c.post("/v1/ask", json={**MULTI, "stream": True})
+    kept = c.post("/v1/ask", json={**MULTI, "stream": True})
+    assert (streamed.headers["X-Cache"], kept.headers["X-Cache"]) == ("miss", "hit") and len(calls) == 1
+    assert streamed.headers["X-Laya-Cache"] == "miss" and kept.headers["X-Laya-Cache"] == "hit"
+    assert [e["type"] for e in events(kept)] == ["answer", "answer", "done"] and events(kept)[-1]["answers"] == events(streamed)[-1]["answers"]
+    plain = c.post("/v1/ask", json=MULTI)  # `stream` is not part of the key
+    assert plain.headers["X-Cache"] == "hit" and len(calls) == 1

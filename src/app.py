@@ -15,18 +15,18 @@ import logging
 import os
 import time
 from pathlib import Path
-from collections import OrderedDict
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Callable, Literal
 
 import anyio.to_thread
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 import strategies
+from cache import AnswerCache
 from answers import InputTooLong, check_questions
 from registry import PROJECT_PATTERN, ProjectBusy, Registry
 import settings
@@ -51,6 +51,7 @@ class AskRequest(BaseModel):
     prune_ratio: float = Field(strategies.PRUNE_RATIO, ge=0, lt=1)
     pair_ratio: float = Field(strategies.PAIR_RATIO, gt=0, le=1)
     trace: bool = False
+    stream: bool = False  # true: each question's answer arrives as a JSON line when it is settled
 
 
 class ValidateRequest(BaseModel):
@@ -114,10 +115,10 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
     offline = os.environ.get("LAYA_OFFLINE") == "1"
     registry = registry or Registry(offline=offline, config=config)
     updates = None if offline else updates or Updates(registry, marker=default_marker())
-    cache: OrderedDict[str, Any] = OrderedDict()  # shortcut: per replica, in memory; upgrade to a shared store if hit rate matters
+    cache = AnswerCache()
 
     def cache_key(body: AskRequest) -> str:
-        part = [body.model_dump(), registry.cache_part(body.project)]
+        part = [body.model_dump(exclude={"stream"}), registry.cache_part(body.project)]
         return hashlib.sha256(json.dumps(part, sort_keys=True, default=str).encode()).hexdigest()
 
     def live(key: str, fixed: Any) -> Any:
@@ -195,6 +196,61 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
     def list_strategies() -> dict[str, Any]:
         return {"default": strategies.DEFAULT_STRATEGY, "strategies": list(strategies.STRATEGIES)}
 
+    def http_failure(error: Exception) -> HTTPException:
+        if isinstance(error, InputTooLong):
+            return HTTPException(413, {"message": str(error), "calls": getattr(error, "calls", [])})
+        if isinstance(error, ValueError):
+            return HTTPException(502, {"message": str(error), "calls": getattr(error, "calls", [])})
+        if isinstance(error, ProjectBusy):
+            return HTTPException(503, str(error), headers={"Retry-After": "5"})
+        _log.error("Laya strategy failed", exc_info=error)
+        return HTTPException(500, "Laya could not answer")
+
+    def mark(response: Response, cached: str) -> None:
+        response.headers["X-Laya-Cache"] = cached  # the name callers already use
+        response.headers["X-Cache"] = cached  # the name the other model services use
+
+    async def pieces(events: Any):
+        """The events of a strategy running in a worker thread, one at a time."""
+        while (event := await anyio.to_thread.run_sync(next, events, None)) is not None:
+            yield event
+
+    def line(event: dict[str, Any]) -> str:
+        return json.dumps(event, ensure_ascii=False) + "\n"
+
+    def ndjson(lines: Any, cached: str) -> StreamingResponse:
+        return StreamingResponse(lines, media_type="application/x-ndjson", headers={"X-Laya-Cache": cached, "X-Cache": cached})
+
+    async def replay(result: dict[str, Any]):
+        """A kept answer in the shape of a stream: each answer, then `done`."""
+        for qid, answer in result["answers"].items():
+            yield line({"type": "answer", "id": qid, "answer": answer})
+        yield line({"type": "done", **result})
+
+    async def live_lines(events: Any, first: tuple[str, Any] | None, key: str | None, size: int):
+        """One JSON line per question as it is settled, then `done` with the same body a call without `stream` returns.
+        A failure after the first answer can only be sent as an `error` line."""
+        result: dict[str, Any] | None = None
+        try:
+            async def all_events():
+                if first is not None:
+                    yield first
+                async for event in events:
+                    yield event
+
+            async for kind, value in all_events():
+                if kind == "answer":
+                    yield line({"type": "answer", "id": value[0], "answer": value[1]})
+                else:
+                    result = value
+        except Exception as error:
+            failure = http_failure(error)
+            yield line({"type": "error", "status": failure.status_code, "detail": failure.detail})
+            return
+        if key and result is not None:
+            cache.put(key, result, size)
+        yield line({"type": "done", **(result or {})})
+
     @app.post("/v1/ask")
     async def ask(body: AskRequest, response: Response, allowed: list[str] | None = Depends(authorize)) -> Any:
         check_scope(allowed, body.project)
@@ -204,36 +260,27 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
             raise HTTPException(422, str(error)) from None
         tuning = strategies.Tuning(body.min_confidence, body.thresholds, body.prune_ratio, body.pair_ratio)
 
-        def failure(status: int, error: ValueError) -> HTTPException:
-            return HTTPException(status, {"message": str(error), "calls": getattr(error, "calls", [])})
-
         size = live("cache_size", cache_size)
-        if not size and cache:
-            cache.clear()
         key = cache_key(body) if size else None
-        if key in cache:
-            cache.move_to_end(key)
-            response.headers["X-Laya-Cache"] = "hit"
-            return cache[key]
+        kept = cache.get(key, size) if key else None  # size 0 empties the cache
+        if kept is not None:
+            if body.stream:
+                return ndjson(replay(kept), "hit")
+            mark(response, "hit")
+            return kept
+        args = (registry, body.strategy, body.text, body.questions, body.max_len, tuning, body.trace, body.project)
         try:
-            result = await anyio.to_thread.run_sync(
-                strategies.run, registry, body.strategy, body.text, body.questions, body.max_len, tuning, body.trace, body.project,
-            )
-            if key:
-                cache[key] = result
-                while len(cache) > size:
-                    cache.popitem(last=False)
-                response.headers["X-Laya-Cache"] = "miss"
-            return result
-        except InputTooLong as error:
-            raise failure(413, error) from None
-        except ValueError as error:
-            raise failure(502, error) from None
-        except ProjectBusy as error:
-            raise HTTPException(503, str(error), headers={"Retry-After": "5"}) from None
-        except Exception:
-            _log.exception("Laya strategy failed")
-            raise HTTPException(500, "Laya could not answer") from None
+            if body.stream:
+                events = pieces(strategies.run_iter(*args))
+                first = await anext(events, None)  # the first question is settled here, so a refusal is still an HTTP error
+                return ndjson(live_lines(events, first, key, size), "miss")
+            result = await anyio.to_thread.run_sync(strategies.run, *args)
+        except Exception as error:
+            raise http_failure(error) from None
+        if key:
+            cache.put(key, result, size)
+            mark(response, "miss")
+        return result
 
     @app.post("/v1/validate", dependencies=[Depends(authorize)])
     def validate(body: ValidateRequest) -> dict[str, bool]:

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `POST /v1/ask` accepts `"stream": true`: each question's answer arrives as a JSON line when it is settled, then `done`. The answer cache also sends an `X-Cache` header (next to `X-Laya-Cache`) and uses the cache class shared with the other model services.
+
 - **Settings** card on `/admin/`: the update interval, cache and limits, project options and similar are saved in `settings.json`, beat the environment variable and apply on every replica within seconds (`GET` and `PUT /admin/settings`). The compose file no longer passes these; the admin password, ports, replica count and Docker settings stay in `.env`.
 
 - Tokens: edit the project list and a calls-per-minute limit without revoking (`PUT /admin/tokens/{id}`), optional expiry, per-token errors and average time on the admin page, and `GET /metrics` (Prometheus text). Over the rate limit a call gets `429` with `Retry-After`.

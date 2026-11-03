@@ -7,11 +7,19 @@ typed questions over HTTP instead of loading the models themselves.
 
 | Call | Purpose |
 |---|---|
-| `POST /v1/ask` | `{"strategy", "project", "text", "questions", "max_len", "min_confidence", "thresholds", "prune_ratio", "pair_ratio", "trace"}` → `{"strategy", "model", "fallback", "project_used", "answers", "uncertain", "calls"}`. Callers pick a strategy and optionally a project. |
+| `POST /v1/ask` | `{"strategy", "project", "text", "questions", "max_len", "min_confidence", "thresholds", "prune_ratio", "pair_ratio", "trace", "stream"}` → `{"strategy", "model", "fallback", "project_used", "answers", "uncertain", "calls"}`. Callers pick a strategy and optionally a project. |
 | `GET /v1/strategies` | The strategy names and the default (`auto`). |
 | `POST /v1/validate` | `{"questions"}` → `{"ok": true}`, or 422 with what is wrong. The one definition of a valid question set (types, `criteria` shapes, 2 to 10 options, 1 to 8 questions); `/v1/ask` applies it too. Callers check their questions here instead of keeping a copy of the rules. |
 | `POST /v1/combine` | `{"voters", "options", "prune_ratio", "pair_ratio"}` → the voters over `options` (renormalised), their `average`, the `kept` options and, with two voters or more, the pairwise `final` comparison. For a caller that adds its own voter (Garrison's cloud fallback, Jev) to the local models. |
 | `GET /health` | `{"status": "ok", "models": {name: loaded}, "project_models": {project: checkpoint_path}, ...}`. No token needed; `ready` still requires both base models. |
+
+**Streaming.** With `"stream": true` the reply of `/v1/ask` is `application/x-ndjson`: a `{"type": "answer", "id", "answer"}`
+line for each question as it is settled, then `{"type": "done", ...}` holding the same body a call without `stream`
+returns. Most strategies ask each model once for all the questions, so the first line arrives after that call and the
+rest follow at once; a strategy that asks a second model or narrows a question makes later answers wait longer. A
+refusal before the first answer (413, 502, 503) is still a normal HTTP error; a failure after it is sent as
+`{"type": "error", "status", "detail"}` and ends the stream. `stream` is not part of the cache key, so a streamed answer
+fills the cache for plain calls and the other way round; a kept answer is streamed back at once.
 
 When `LAYA_ADMIN_PASSWORD` is set, send a project token (made on `/admin/`) as `X-Internal-Token`. Errors: 422 bad request or question, 413 text longer
 than the window, 502 no model could answer, 500 anything else. A 413 or 502 body is
