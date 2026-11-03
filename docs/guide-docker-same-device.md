@@ -32,8 +32,8 @@ Run the service in Docker on the machine you work on (your PC), so other program
 
 ## Project checkpoints
 
-Set `LAYA_PROJECT_MODELS_DIR=/models/projects` in Compose's `.env` to enable finished local typed-decisions
-checkpoints. Leave it unset to disable project loading. Copy each complete directory into the shared volume:
+Set the **Project models folder** on the admin Settings card to `/models/projects` to enable finished local typed-decisions
+checkpoints. Leave it empty to disable project loading. Copy each complete directory into the shared volume:
 
 ```bash
 docker compose up -d --build

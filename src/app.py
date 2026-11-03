@@ -138,6 +138,13 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
                     _log.exception("%s failed", name)
             await anyio.sleep(min(wait, 1.0) if wait > 0 else 1.0)
 
+    def threads_job() -> None:
+        """Applies a CPU thread count saved from another replica's admin page."""
+        saved = settings.load(tokens.settings_path).get("torch_threads")
+        current = _torch_threads()
+        if saved and current is not None and saved != current:
+            _set_torch_threads(int(saved))
+
     def sync_job() -> None:
         if updates.sync():
             _log.info("Reloaded models: new weights were downloaded by another replica")
@@ -150,6 +157,8 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
             if updates:
                 background.start_soon(every, lambda: live("update_check_hours", check_hours) * 3600, updates.check, "Update check")
                 background.start_soon(every, lambda: live("sync_seconds", sync_seconds), sync_job, "Weight sync")
+            if config:
+                background.start_soon(every, lambda: 1.0, threads_job, "Thread sync")
             yield
             background.cancel_scope.cancel()
 
@@ -244,7 +253,7 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 
     @app.put("/admin/threads", dependencies=[Depends(admin)])
     def set_threads(body: Threads) -> dict[str, Any]:
-        """Applies to this replica now and is saved; other replicas pick it up when they restart. It beats LAYA_TORCH_THREADS."""
+        """Applies to this replica now and is saved; the other replicas apply it within a few seconds. It beats LAYA_TORCH_THREADS."""
         _set_torch_threads(body.torch_threads)
         settings.save(tokens.settings_path, torch_threads=body.torch_threads)
         return {"torch_threads": _torch_threads()}

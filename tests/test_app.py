@@ -243,3 +243,24 @@ def test_settings_are_admin_only_checked_and_apply_live(tmp_path):
     fixed = TestClient(create_app(Registry(lambda checkpoint: FakeEngine()), "admin"))
     assert fixed.get("/admin/settings", headers=admin).json() == {"settings": []}
     assert fixed.put("/admin/settings", json={"values": {}}, headers=admin).status_code == 409
+
+
+def test_a_saved_thread_count_reaches_other_replicas(tmp_path, monkeypatch):
+    import time
+    import app
+    import settings
+    from options import SETTINGS
+    from tokens import TokenStore
+    store = TokenStore(tmp_path / "t.json")
+    config = settings.Config(store.settings_path, SETTINGS)
+    config.set({"update_check_hours": 0, "sync_seconds": 0, "warm": False})
+    seen = []
+    monkeypatch.setattr(app, "_torch_threads", lambda: 2)
+    monkeypatch.setattr(app, "_set_torch_threads", seen.append)
+    with TestClient(create_app(Registry(lambda checkpoint: FakeEngine()), "admin", tokens=store, config=config)):
+        settings.save(store.settings_path, torch_threads=5)
+        for _ in range(300):  # the loop looks every second
+            if seen:
+                break
+            time.sleep(0.02)
+    assert seen and set(seen) == {5}

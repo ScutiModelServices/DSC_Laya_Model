@@ -53,8 +53,7 @@ First start downloads weights into the `models` volume; `laya_lb` waits for a he
 ## Project checkpoints
 
 Train typed-decisions on your PC and transfer the complete project directory to the deployment host.
-Set `LAYA_PROJECT_MODELS_DIR=/models/projects` in the host's Compose `.env` (unset = off), recreate containers,
-then copy the directory into the shared volume:
+Set the **Project models folder** on the admin Settings card to `/models/projects` (empty = off), then copy the directory into the shared volume:
 
 ```bash
 docker compose up -d --build

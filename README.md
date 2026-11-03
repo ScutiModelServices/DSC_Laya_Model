@@ -24,7 +24,7 @@ than the window, 502 no model could answer, 500 anything else. A 413 or 502 body
 ### Project checkpoints
 
 Training happens elsewhere. Copy a finished typed-decisions checkpoint into
-`<LAYA_PROJECT_MODELS_DIR>/<project>/`. Set `LAYA_PROJECT_MODELS_DIR` to enable local project models;
+`<LAYA_PROJECT_MODELS_DIR>/<project>/`. Set the **Project models folder** on the admin Settings card (`LAYA_PROJECT_MODELS_DIR` for `run.bat`) to enable local project models;
 unset or empty disables them. The directory must contain `rl_agent_config.json`, `model.safetensors`,
 `encoder/config.json` and `tokenizer/tokenizer.json` and be loadable by `laya.load(path)`.
 

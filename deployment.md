@@ -26,7 +26,7 @@ There are two ways to run it. Pick one: both use host port 9120.
 | `LAYA_REPLICAS` | `1` | Number of `laya` containers. Read by Compose, not the service. |
 | `LAYA_PORT` | `9120` | Host port `laya_lb` publishes. Inside the containers the service always listens on 9120. |
 | `LAYA_ADMIN_PASSWORD` | empty | Password for the `/admin/` page, where per-project tokens are made. When set, every call except `/health` must send one of those tokens as `X-Internal-Token` (Garrison: `LAYA_TOKEN` in `apps/garrison/.env`). Empty = no auth. |
-| `LAYA_WARM` | `1` | Load both models at start. Compose sets it; with `0` the first request pays the load time. |
+| `LAYA_WARM` | `1` | Load both models at start (also on the Settings card). With it off the first request pays the load time. |
 | `LAYA_TORCH_THREADS` | torch decides | Cap on torch CPU threads; `/health` reports the value in use, `/admin/` can change it and saves the value (other replicas apply it on restart). |
 | `LAYA_UPDATE_CHECK_HOURS` | `6` | How often each replica looks for a newer `laya` package (PyPI) and newer weights (Hugging Face). It only reports; `0` turns the timer off. Off too with `LAYA_OFFLINE=1`. |
 | `LAYA_SYNC_SECONDS` | `10` | How often a replica looks for weights another replica downloaded (a marker file in the models volume) and reloads its models. `0` turns it off. |
@@ -91,8 +91,7 @@ A 422 means the service is up and checking requests (an empty question set is in
 ### Local project checkpoints
 
 Train typed-decisions elsewhere and copy the complete checkpoint directory to the host. With the standalone
-stack, set `LAYA_PROJECT_MODELS_DIR=/models/projects` and optionally `LAYA_MAX_PROJECT_MODELS=2` in Compose's
-`.env`, then recreate the service. Copy a project directory into the existing shared volume:
+stack, set the **Project models folder** on the admin Settings card to `/models/projects` and optionally the project model limit to 2; no restart is needed. Copy a project directory into the existing shared volume:
 
 ```bash
 docker compose up -d --build
