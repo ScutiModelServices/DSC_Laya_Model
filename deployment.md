@@ -53,7 +53,7 @@ Without Docker: `run.bat` (runs `uv sync` into `.venv`, listens on `127.0.0.1:91
 ## Inside the Citadel stack
 
 The Citadel compose builds this folder through `build: ../LayaModel`, so `LayaModel/` must sit next to `Citadel/`
-(`Python/LayaModel` and `Python/Citadel`). Services `laya` and `laya_lb` join the `core` network; Garrison reaches the
+(`AI/ModelServices/LayaModel` and `Python/Citadel`). Services `laya` and `laya_lb` join the `core` network; Garrison reaches the
 service at `http://laya_lb:9120` (its `LAYA_SERVICE_URL`, set by Compose).
 
 ```bash
