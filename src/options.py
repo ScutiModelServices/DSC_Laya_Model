@@ -5,6 +5,8 @@ from settings import Setting
 SETTINGS = [
     Setting("update_check_hours", "Check for updates every (hours)", "float", 6.0, "LAYA_UPDATE_CHECK_HOURS", 0, 720,
             help="0 = only when you press Check now"),
+    Setting("max_inflight", "Calls allowed to wait for the models", "int", 0, "LAYA_MAX_INFLIGHT", 0, 10000,
+            help="Per replica; more /v1/ask calls get 429. 0 = 4"),
     Setting("sync_seconds", "Look for new weights every (seconds)", "float", 10.0, "LAYA_SYNC_SECONDS", 0, 3600,
             help="Weights another replica downloaded. 0 = off"),
     Setting("cache_size", "Answers kept per replica", "int", 256, "LAYA_CACHE_SIZE", 0, 100000,
