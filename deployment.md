@@ -3,14 +3,7 @@
 LayaModel is one HTTP service (port 9120) that owns the Laya models. It runs as `laya` replicas behind an nginx
 load balancer, `laya_lb`. Callers use `http://<host>:9120`; they never reach a replica directly.
 
-There are two ways to run it. Pick one: both use host port 9120.
-
-| | Standalone | Inside the Citadel stack |
-|---|---|---|
-| Where | this folder's `docker-compose.yml` | `Citadel/docker-compose.yml` |
-| Compose project | `laya` | `citadel` |
-| Network | its own `laya` net | Citadel's `core` |
-| Start | `docker compose up -d --build` here | `docker compose up -d --build` in `Citadel/` |
+It is its own Docker stack. Other projects (Citadel's legion, for example) call it over HTTP and never build or start it.
 
 ## Requirements
 
@@ -38,11 +31,11 @@ There are two ways to run it. Pick one: both use host port 9120.
 | `LAYA_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines per replica (minimum `1`); LRU evicts idle engines only. Base models are never evicted. |
 | `LAYA_PROJECT_WAIT_SECONDS` | `30` | How long a request waits for a free project slot before a `503` with `Retry-After: 5`. |
 
-Put the variables in a `.env` next to the compose file that runs the stack (this folder, or `Citadel/`).
+Put the variables in a `.env` next to the compose file that runs the stack (this folder).
 
-## Standalone
+## Run
 
-The standalone stack does not depend on Citadel or any other project. A caller reaches it at
+The stack does not depend on Citadel or any other project. A caller reaches it at
 `http://<host>:9120`, or from another container on the same host at `http://host.docker.internal:9120`.
 
 ```bash
@@ -51,23 +44,16 @@ docker compose up -d --build
 
 Without Docker: `run.bat` (runs `uv sync` into `.venv`, listens on `127.0.0.1:9120`).
 
-## Inside the Citadel stack
+## Callers
 
-The Citadel compose builds this folder through `build: ../LayaModel`, so `LayaModel/` must sit next to `Citadel/`
-(`AI/ModelServices/LayaModel` and `Python/Citadel`). Services `laya` and `laya_lb` join the `core` network; Garrison reaches the
-service at `http://laya_lb:9120` (its `LAYA_SERVICE_URL`, set by Compose).
-
-```bash
-cd ../Citadel
-docker compose up -d --build laya laya_lb
-```
-
-The `laya_lb` published port is bound to `127.0.0.1` there, so only the host can call it.
+A caller needs only the URL and a token. From a container on the same host use `http://host.docker.internal:9120`;
+Citadel's legion does this through `LAYA_SERVICE_URL` in `apps/legion/.env`. Citadel's compose does not start or build
+this service, so the two folders can sit anywhere and be started in any order.
 
 ## First start
 
 1. The build installs torch and the service. The image has no weights.
-2. Each replica downloads the weights into the `models` volume (`laya_models` in Citadel) the first time. Replicas
+2. Each replica downloads the weights into the `models` volume the first time. Replicas
    share the volume, so later starts and extra replicas reuse the download.
 3. `laya_lb` starts only after a replica passes its health check. The check allows 120 s (`start_period`) before
    failures count, so a slow first download can leave the stack `unhealthy`; run `docker compose ps` and wait, or
@@ -92,8 +78,8 @@ A 422 means the service is up and checking requests (an empty question set is in
 
 ### Local project checkpoints
 
-Train typed-decisions elsewhere and copy the complete checkpoint directory to the host. With the standalone
-stack, set the **Project models folder** on the admin Settings card to `/models/projects` and optionally the project model limit to 2; no restart is needed. Copy a project directory into the existing shared volume:
+Train typed-decisions elsewhere and copy the complete checkpoint directory to the host. With Docker,
+set the **Project models folder** on the admin Settings card to `/models/projects` and optionally the project model limit to 2; no restart is needed. Copy a project directory into the existing shared volume:
 
 ```bash
 docker compose up -d --build
@@ -148,7 +134,7 @@ The **Updates** card shows the installed `laya` package and each weights reposit
 | Garrison: "Laya is not configured: set LAYA_SERVICE_URL" | `LAYA_SERVICE_URL` is empty (running outside Compose and not set). |
 | Garrison: "could not be reached" | Service not started, or Garrison's `LAYA_SERVICE_URL` does not point at it. |
 | 401 "Invalid token" from every call but `/health` | the caller sends no project token, or a revoked one. |
-| `bind: address already in use` on 9120 | Standalone and Citadel stacks both running. Stop one. |
+| `bind: address already in use` on 9120 | Another process holds the port. Stop it, or set `LAYA_PORT`. |
 | nginx 502 after scaling | `laya_lb` not restarted after the replica count changed. |
 | Offline start fails to load a model | `LAYA_OFFLINE=1` but the weights are not in the `models` volume yet. |
 

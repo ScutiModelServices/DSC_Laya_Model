@@ -3,7 +3,7 @@ rem Deploy menu: publish the code to the live branch and/or copy the git-ignored
 rem deployment machine in ONE ssh session (one password prompt).
 rem The server refuses root over ssh, so we log in as a normal user. If the copy cannot write,
 rem option 6 copies the one-time "chown" command and opens the server's web terminal (root shell).
-rem LayaModel must sit next to Citadel on the server: the Citadel compose builds ../LayaModel.
+rem The service runs from its own docker-compose.yml in the deploy folder, with .env beside it.
 rem Override the target: set DEPLOY_HOST / DEPLOY_DIR / DEPLOY_WEB_PORT before running, or put them in the git-ignored
 rem tools\deploy.local.bat (copy tools\deploy.local.example.bat) so the address stays out of the repository.
 setlocal enabledelayedexpansion

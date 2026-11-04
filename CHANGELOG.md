@@ -7,6 +7,7 @@
 - Settings: `max_inflight` (`LAYA_MAX_INFLIGHT`, 0 = 4): more `/v1/ask` calls waiting for the models than that get `429` with `Retry-After: 5`, like the other model services.
 - Deploy: `README.md` is published to `live` like in the other model services.
 - Compose: `stop_grace_period: 90s`, so a restart lets a running answer finish instead of cutting it off after Docker's default 10 s.
+- Docs: LayaModel is its own stack; Citadel calls it over HTTP and does not build it, so the "must sit next to Citadel" notes in `deployment.md` and `tools/deploy.bat` are gone.
 - Docs: set CPU threads to the number of physical cores, not logical CPUs.
 - `/metrics` also returns `laya_request_seconds`, a histogram of how long `/v1` calls took on that replica.
 - Compose: optional `LAYA_MEM_LIMIT` caps the container's RAM (default no cap).
