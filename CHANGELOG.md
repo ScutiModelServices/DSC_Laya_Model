@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings: `max_inflight` (`LAYA_MAX_INFLIGHT`, 0 = 4): more `/v1/ask` calls waiting for the models than that get `429` with `Retry-After: 5`, like the other model services.
 - Deploy: `README.md` is published to `live` like in the other model services.
 - Compose: `stop_grace_period: 90s`, so a restart lets a running answer finish instead of cutting it off after Docker's default 10 s.
 - Docs: set CPU threads to the number of physical cores, not logical CPUs.

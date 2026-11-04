@@ -103,19 +103,38 @@ def _set_torch_threads(threads: int) -> None:
 
 def create_app(registry: Registry | None = None, admin_password: str | None = None, warm: bool = False,
                tokens: TokenStore | None = None, updates: Updates | None = None, check_hours: float = 0,
-               cache_size: int = 0, sync_seconds: float = 0, config: settings.Config | None = None) -> FastAPI:
+               cache_size: int = 0, sync_seconds: float = 0, max_inflight: int | None = None,
+               config: settings.Config | None = None) -> FastAPI:
     """`admin_password` (LAYA_ADMIN_PASSWORD) unlocks /admin/, where each project gets a token of its own; when it
     is set, every call except /health must send one of those tokens in the X-Internal-Token header. Unset = no
     auth at all (local use only). `tokens` holds the project tokens (LAYA_TOKENS_FILE). `check_hours` > 0 looks for
     newer Laya releases that often (LAYA_UPDATE_CHECK_HOURS); it never downloads. `updates` is off with LAYA_OFFLINE=1.
     `cache_size` > 0 keeps that many answers per replica (LAYA_CACHE_SIZE); `sync_seconds` > 0 makes the replica look
-    that often for weights another replica downloaded (LAYA_SYNC_SECONDS). `config` (the admin page's settings) replaces
-    `warm`, `check_hours`, `cache_size` and `sync_seconds` and keeps them live; without it they stay fixed."""
+    that often for weights another replica downloaded (LAYA_SYNC_SECONDS). `max_inflight` is how many /v1/ask calls may
+    wait for the models at once (LAYA_MAX_INFLIGHT, 0 = 4). `config` (the admin page's settings) replaces `warm`,
+    `check_hours`, `cache_size`, `sync_seconds` and `max_inflight` and keeps them live; without it they stay fixed."""
     tokens = tokens or TokenStore(os.environ.get("LAYA_TOKENS_FILE", "tokens.json"))
     offline = os.environ.get("LAYA_OFFLINE") == "1"
     registry = registry or Registry(offline=offline, config=config)
     updates = None if offline else updates or Updates(registry, marker=default_marker())
     cache = AnswerCache()
+    inflight = 0
+
+    def inflight_limit() -> int:
+        """Calls this replica lets wait for the models at once; more get 429. 0 = 4."""
+        value = config.get("max_inflight") if config else (
+            max_inflight if max_inflight is not None else int(os.environ.get("LAYA_MAX_INFLIGHT") or 0))
+        return value or 4
+
+    async def slot():
+        nonlocal inflight
+        if inflight >= inflight_limit():
+            raise HTTPException(429, "Laya is busy: too many requests waiting", headers={"Retry-After": "5"})
+        inflight += 1
+        try:
+            yield
+        finally:
+            inflight -= 1
 
     def cache_key(body: AskRequest) -> str:
         part = [body.model_dump(exclude={"stream"}), registry.cache_part(body.project)]
@@ -252,7 +271,8 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         yield line({"type": "done", **(result or {})})
 
     @app.post("/v1/ask")
-    async def ask(body: AskRequest, response: Response, allowed: list[str] | None = Depends(authorize)) -> Any:
+    async def ask(body: AskRequest, response: Response, allowed: list[str] | None = Depends(authorize),
+                  _slot: None = Depends(slot)) -> Any:
         check_scope(allowed, body.project)
         try:
             check_questions(body.questions)

@@ -1,3 +1,7 @@
+import asyncio
+import threading
+
+import httpx
 from fastapi.testclient import TestClient
 
 from app import create_app
@@ -25,6 +29,28 @@ def test_ask_loads_a_model_once_and_reports_each_call():
     c.post("/v1/ask", json=BODY)
     assert loads == ["convaiinnovations/laya"]
     assert c.get("/health").json()["models"] == {"convaiinnovations/laya": True, "typed-decisions": False}
+
+
+def test_asks_over_the_in_flight_limit_get_429():
+    release = threading.Event()
+
+    class Slow:
+        def predict(self, text, questions, max_len):
+            release.wait(5)  # runs in a worker thread, so the first call keeps its slot while the second arrives
+            return FakeEngine().predict(text, questions, max_len)
+
+    async def main():
+        app = create_app(Registry(lambda checkpoint: Slow()), max_inflight=1)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://svc") as http:
+            first = asyncio.create_task(http.post("/v1/ask", json=BODY))
+            await asyncio.sleep(0.3)
+            second = await http.post("/v1/ask", json=BODY)
+            release.set()
+            return second, await first
+
+    second, first = asyncio.run(main())
+    assert second.status_code == 429 and second.headers["Retry-After"] == "5"
+    assert first.status_code == 200
 
 
 def test_engine_failure_is_a_generic_500():
@@ -239,7 +265,7 @@ def test_settings_are_admin_only_checked_and_apply_live(tmp_path):
     bad = put({"max_project_models": 0})
     assert bad.status_code == 422 and "between" in bad.json()["detail"]
     assert put({"nope": 1}).status_code == 422
-    assert put({"max_project_models": None}).json()["settings"][3]["source"] == "default"
+    assert {row["key"]: row for row in put({"max_project_models": None}).json()["settings"]}["max_project_models"]["source"] == "default"
     assert registry._project_cap == 2
     fixed = TestClient(create_app(Registry(lambda checkpoint: FakeEngine()), "admin"))
     assert fixed.get("/admin/settings", headers=admin).json() == {"settings": []}
