@@ -192,6 +192,7 @@ def test_rate_limit_edit_stats_and_metrics(tmp_path):
     assert row["projects"] == ["a"] and "rate" not in row and row["timed"] >= 1
     assert c.get("/metrics").status_code == 401
     assert 'laya_requests_total{token="p"}' in c.get("/metrics", headers=admin).text
+    assert 'laya_request_seconds_bucket{le="+Inf"}' in c.get("/metrics", headers=admin).text
 
 
 def test_identical_questions_are_answered_from_the_cache_until_the_weights_change():

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Docs: set CPU threads to the number of physical cores, not logical CPUs.
+- `/metrics` also returns `laya_request_seconds`, a histogram of how long `/v1` calls took on that replica.
+- Compose: optional `LAYA_MEM_LIMIT` caps the container's RAM (default no cap).
+
 - `POST /v1/ask` accepts `"stream": true`: each question's answer arrives as a JSON line when it is settled, then `done`. The answer cache also sends an `X-Cache` header (next to `X-Laya-Cache`) and uses the cache class shared with the other model services.
 
 - **Settings** card on `/admin/`: the update interval, cache and limits, project options and similar are saved in `settings.json`, beat the environment variable and apply on every replica within seconds (`GET` and `PUT /admin/settings`). The compose file no longer passes these; the admin password, ports, replica count and Docker settings stay in `.env`.
