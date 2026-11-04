@@ -7,7 +7,7 @@ This file is the one instruction file for every coding agent; `CLAUDE.md` only i
 
 ## Rules
 - Follow the `model-service-parity` skill and `AI/ModelServices/SHARED-FEATURES.md` (what must match in every model service) and `AI/ModelServices/SERVICE-SPECIFIC.md` (what differs on purpose). A change to a shared feature goes to every service; a new difference goes into `SERVICE-SPECIFIC.md` in the same change.
-- `web/index.html`, `src/tokens.py` and `src/settings.py` are copies shared with the other model services. Change one, copy it to the others, run `python tools/check_sync.py` in each repo.
+- `web/index.html`, `src/tokens.py`, `src/settings.py` and `.dockerignore` are copies shared with the other model services. Change one, copy it to the others, run `python tools/check_sync.py` in each repo.
 - `src/updates.py` is this service's own (it updates the models in its registry and syncs weights between replicas), so it is the one copy `check_sync.py` skips.
 - Answers come from the `laya` package through `src/registry.py` and `src/strategies.py`; their tests are `tests/test_projects.py` and `tests/test_strategies.py`.
 - CPU threads are `torch_threads`, not `num_thread`. `/v1/ask` is limited by `max_inflight` (429); project models wait up to `project_wait_seconds`, then 503.

@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import time
 
 import httpx
 from fastapi.testclient import TestClient
@@ -182,6 +183,36 @@ def test_health_ready_requires_all_models():
     body = http.get("/health").json()
     assert body["ready"] is True
     assert body["status"] == "ok" and all(body["models"].values())
+
+
+def test_startup_warms_the_models_in_the_background_and_health_answers_meanwhile():
+    release = threading.Event()
+
+    def slow(checkpoint):
+        release.wait(5)
+        return FakeEngine()
+
+    with TestClient(create_app(Registry(slow), warm=True)) as c:
+        assert c.get("/health").json()["ready"] is False  # still loading, but the service answers
+        release.set()
+        for _ in range(200):
+            if c.get("/health").json()["ready"]:
+                break
+            time.sleep(0.05)
+        assert c.get("/health").json()["ready"] is True
+
+
+def test_a_failed_warm_up_is_logged_without_stopping_the_service(caplog):
+    def failing(checkpoint):
+        raise RuntimeError("no weights")
+
+    with TestClient(create_app(Registry(failing), warm=True)) as c:
+        for _ in range(200):
+            if "warm-up failed" in caplog.text:
+                break
+            time.sleep(0.05)
+        assert c.get("/health").status_code == 200
+    assert "warm-up failed" in caplog.text
 
 
 def test_a_token_limited_to_projects_refuses_other_projects(tmp_path):

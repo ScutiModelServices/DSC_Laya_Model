@@ -169,11 +169,18 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         if updates.sync():
             _log.info("Reloaded models: new weights were downloaded by another replica")
 
+    async def warm_up() -> None:
+        """In the background, so /health answers while the first start downloads the models."""
+        try:
+            await anyio.to_thread.run_sync(registry.warm, abandon_on_cancel=True)
+        except Exception:
+            _log.exception("Model warm-up failed; the first request will try again")
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        if live("warm", warm):
-            await anyio.to_thread.run_sync(registry.warm)
         async with anyio.create_task_group() as background:
+            if live("warm", warm):
+                background.start_soon(warm_up)
             if updates:
                 background.start_soon(every, lambda: live("update_check_hours", check_hours) * 3600, updates.check, "Update check")
                 background.start_soon(every, lambda: live("sync_seconds", sync_seconds), sync_job, "Weight sync")

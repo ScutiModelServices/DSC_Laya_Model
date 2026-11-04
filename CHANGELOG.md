@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Start-up: the models load in the background, so `/health` answers while the first start downloads them (like the other model services); a failed warm-up is logged and the first request tries again. The compose health check now allows 300 s to start.
+- Docker: `.dockerignore` keeps `.git`, `.venv`, tests and local state out of the build context (the same file in every model service).
 - Settings: `max_inflight` (`LAYA_MAX_INFLIGHT`, 0 = 4): more `/v1/ask` calls waiting for the models than that get `429` with `Retry-After: 5`, like the other model services.
 - Deploy: `README.md` is published to `live` like in the other model services.
 - Compose: `stop_grace_period: 90s`, so a restart lets a running answer finish instead of cutting it off after Docker's default 10 s.

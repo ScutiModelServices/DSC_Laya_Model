@@ -24,7 +24,7 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9120/health')"]
       interval: 15s
       timeout: 5s
-      start_period: 120s
+      start_period: 300s
     networks: [laya]
 
   laya_lb:
