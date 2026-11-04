@@ -9,7 +9,7 @@ Run the service directly with Python. One process, no load balancer, listens on 
 
 ## Windows
 Double-click `run.bat` or run it in a terminal from `LayaModel/`. It runs `uv sync` to create or update `.venv`
-(needs uv: `python -m pip install uv`), then starts `python src/app.py`.
+(needs uv: `winget install astral-sh.uv`), then starts `python src/app.py`.
 
 ## Linux / macOS
 ```bash
