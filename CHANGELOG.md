@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `run.bat`: runs `uv sync` directly; `python -m uv` failed when uv was installed only as a program (winget).
 - Start-up: the models load in the background, so `/health` answers while the first start downloads them (like the other model services); a failed warm-up is logged and the first request tries again. The compose health check now allows 300 s to start.
 - Docker: `.dockerignore` keeps `.git`, `.venv`, tests and local state out of the build context (the same file in every model service).
 - Settings: `max_inflight` (`LAYA_MAX_INFLIGHT`, 0 = 4): more `/v1/ask` calls waiting for the models than that get `429` with `Retry-After: 5`, like the other model services.

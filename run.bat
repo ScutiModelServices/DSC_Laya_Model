@@ -5,7 +5,7 @@ REM DESCRIPTION: Shared HTTP service that owns the Laya models for every project
 
 cd /d "%~dp0"
 
-python -m uv sync
+uv sync
 if errorlevel 1 (
     echo uv sync failed. Install uv: winget install astral-sh.uv
     pause
