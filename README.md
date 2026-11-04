@@ -114,3 +114,10 @@ Every project reaches the service the same way: `POST /v1/ask` with a strategy.
 
 The service code is MIT. The `laya` package and the Laya weights it downloads are by Convai Innovations
 under Apache-2.0; read their terms before redistributing the weights. See [LICENSE](LICENSE) and [CHANGELOG.md](CHANGELOG.md).
+
+
+## Try it from the admin page
+
+Open `/admin/` and use **Try it** to call the public API with a service token held only in memory. Runs use normal token scopes, limits and caches; the panel shows HTTP status, latency, responses, cancellation and a curl equivalent with a token placeholder. See [the web UI guide](docs/guide-web-ui.md#try-it-send-a-real-request).
+
+Ask sends `text` and a questions JSON object to `POST /v1/ask`, with the selected strategy and optional project. Streaming appends one NDJSON answer event per question. The operation menu also exposes question validation, vote combination and the strategy list.

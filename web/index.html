@@ -199,6 +199,7 @@ dialog p { overflow-wrap: anywhere; }
       <div class="tile"><p class="tile-label">CPU threads</p><p id="thread-value" class="tile-value">—</p></div>
       <div class="tile"><p class="tile-label">Active tokens</p><p id="token-count" class="tile-value">—</p></div>
     </div>
+    <section id="playground" class="card"></section>
     <p id="page-error" class="error" role="alert"></p>
     <section class="card" aria-labelledby="tokens-title">
       <div class="section-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 10 7-7m-3 3 3 3m-6 0 3 3M15 14a6 6 0 1 1-5-5 6 6 0 0 1 5 5Z"/><path d="M7 16h.01"/></svg><h2 id="tokens-title">Project tokens</h2></div>
@@ -286,14 +287,16 @@ dialog p { overflow-wrap: anywhere; }
   <p id="revoke-error" class="error" role="alert"></p>
   <div class="dialog-actions"><button id="cancel-revoke" type="button" autofocus>Cancel</button><button id="confirm-revoke" class="danger" type="button">Revoke token</button></div>
 </dialog>
+<script src="playground.js"></script>
 <script>
 // Per-service configuration. The rest of this page is shared verbatim.
-const CONFIG = {title: "LayaModel", address: location.origin, threadLabel: "Torch CPU threads", threadField: "torch_threads", adminEnv: "LAYA_ADMIN_PASSWORD", replicasEnv: "LAYA_REPLICAS", extraTile: null, updates: true};
+const CONFIG = {title: "LayaModel", address: location.origin, threadLabel: "Torch CPU threads", threadField: "torch_threads", adminEnv: "LAYA_ADMIN_PASSWORD", replicasEnv: "LAYA_REPLICAS", extraTile: null, updates: true, playground: {"operations":[{"label":"Ask","route":"/v1/ask","method":"POST","fields":[{"key":"text","label":"Text","type":"textarea","required":true,"maxLength":5000,"default":"Hello from the playground."},{"key":"questions","label":"Questions","type":"json","required":true,"default":{"q":{"type":"noul","instructions":"How likely is this text to be a greeting?"}}},{"key":"strategy","label":"Strategy","type":"select","options":["english-only","typed-only","english-then-typed","typed-then-english","most-confident","average","consensus","auto"],"default":"english-only"},{"key":"project","label":"Project (optional)","type":"text"},{"key":"stream","label":"Stream response","type":"checkbox","default":true}],"response":"stream","encoding":"json","lookup":{"route":"/v1/strategies","key":"strategies","field":"strategy","label":"Load strategies"}},{"label":"Validate questions","route":"/v1/validate","method":"POST","fields":[{"key":"questions","label":"Questions","type":"json","required":true,"default":{"q":{"type":"noul","instructions":"How likely is this text to be a greeting?"}}}],"response":"json","encoding":"json"},{"label":"Combine voters","route":"/v1/combine","method":"POST","fields":[{"key":"voters","label":"Voters","type":"json","required":true,"default":{"local":{"type":"choice","choice":"a","probabilities":{"a":0.8,"b":0.2},"answer_confidence":0.9}}}],"response":"json","encoding":"json"},{"label":"List strategies","route":"/v1/strategies","method":"GET","fields":[],"response":"json"}]}};
 
 const $ = id => document.getElementById(id);
 const storageKey = CONFIG.title + ":admin";
 let admin = "", session = new AbortController(), poll, polling = false, initializedThreads = false;
 let tokenRows = [], pendingRevoke = null, pendingEdit = null, settingRows = [], settingsTimer, savedTimer, copyTimer, tokenVersion = 0;
+const playground = Playground.mount($("playground"), CONFIG.playground, {secrets: () => [admin]});
 let theme = "system";
 try { theme = localStorage.getItem("admin-theme") || "system"; } catch {}
 if (!["system", "light", "dark"].includes(theme)) theme = "system";
@@ -330,6 +333,7 @@ function forgetToken() {
   clearTimeout(copyTimer);
 }
 function signOut(focus = true) {
+  playground.reset();
   session.abort();
   session = new AbortController();
   clearInterval(poll);

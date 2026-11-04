@@ -147,3 +147,8 @@ A plain publish (`tools\deploy.bat` option 1) only updates the `live` branch, so
 ## Settings on the admin page
 
 These are edited on the **Settings** card of `/admin/` and saved in `settings.json` beside the tokens, so all replicas share them: `LAYA_UPDATE_CHECK_HOURS`, `LAYA_MAX_INFLIGHT`, `LAYA_SYNC_SECONDS`, `LAYA_CACHE_SIZE`, `LAYA_MAX_PROJECT_MODELS`, `LAYA_PROJECT_WAIT_SECONDS`, `LAYA_PROJECT_MODELS_DIR` and `LAYA_WARM` (the last is read at start). A saved value beats the environment variable. The compose file no longer passes them, so a `.env` value only applies if you add the variable under `environment:` of `laya`. Still in `.env`: `LAYA_ADMIN_PASSWORD`, `LAYA_PORT`, `LAYA_REPLICAS`, `LAYA_TORCH_THREADS` (a starting value for the CPU threads card) and `LAYA_OFFLINE`.
+
+
+## Verify with Try it
+
+After deployment, open `/admin/` and use **Try it** with a public service token to exercise the deployed public route. It uses normal scope, admission/rate limits and cache behavior, so busy or unauthorized requests remain visible as HTTP errors. No new environment setting or admin-to-public auth bypass is introduced. Deploy the complete `web/` directory, including `playground.js`. See [the web UI guide](docs/guide-web-ui.md#try-it-send-a-real-request) for input formats, limits and token handling.
