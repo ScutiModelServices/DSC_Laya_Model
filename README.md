@@ -84,8 +84,8 @@ docker compose up -d --build
 
 `laya` runs `LAYA_REPLICAS` copies (default 1) behind an nginx (`laya_lb`, `least_conn`, one retry on
 error/timeout). Each replica keeps its own models in RAM; downloaded weights are shared in the `models`
-volume. After changing the replica count, run `docker compose restart laya_lb`. Full guide (standalone vs the
-Citadel stack, first start, scaling, troubleshooting): [deployment.md](deployment.md).
+volume. After changing the replica count, run `docker compose restart laya_lb`. Full guide (first start, scaling,
+troubleshooting): [deployment.md](deployment.md).
 
 ### Guides
 
