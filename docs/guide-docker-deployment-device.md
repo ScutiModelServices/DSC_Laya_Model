@@ -1,6 +1,6 @@
 # LayaModel: Docker on a deployment device (ZimaOS server)
 
-Run the service on a separate always-on box (default `user@your-server.local`, folder
+Run the service on a separate always-on box (default `lex@scutiserver1.local`, folder
 `/media/ZimaOS-HD/Apps/LayaModel`). Laya is self-contained: it needs no other project on the box. Callers reach it
 over the published port.
 
