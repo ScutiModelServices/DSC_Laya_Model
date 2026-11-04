@@ -35,6 +35,7 @@ DEPLOY_PATHS = [
     "uv.lock",  # the Dockerfile copies it: `uv sync --frozen`
     "src",
     "web",
+    "README.md",
     "deployment.md",
 ]
 # Left out of live: Python tests/ folders are not built into the image.

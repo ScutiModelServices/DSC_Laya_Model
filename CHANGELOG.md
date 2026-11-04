@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Deploy: `README.md` is published to `live` like in the other model services.
+- Compose: `stop_grace_period: 90s`, so a restart lets a running answer finish instead of cutting it off after Docker's default 10 s.
 - Docs: set CPU threads to the number of physical cores, not logical CPUs.
 - `/metrics` also returns `laya_request_seconds`, a histogram of how long `/v1` calls took on that replica.
 - Compose: optional `LAYA_MEM_LIMIT` caps the container's RAM (default no cap).

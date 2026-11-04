@@ -10,6 +10,7 @@ services:
     build: .
     restart: unless-stopped
     mem_limit: ${LAYA_MEM_LIMIT:-0}  # 0 = no cap; a cap makes an out-of-memory kill stay inside this container
+    stop_grace_period: 90s  # uvicorn lets running calls finish on SIGTERM; Docker's default 10 s would kill a long answer
     environment:
       LAYA_ADMIN_PASSWORD: ${LAYA_ADMIN_PASSWORD:-}
       LAYA_TORCH_THREADS: ${LAYA_TORCH_THREADS:-}
