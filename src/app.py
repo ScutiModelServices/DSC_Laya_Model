@@ -95,7 +95,7 @@ def _torch_threads() -> int | None:
 
 def _set_torch_threads(threads: int) -> None:
     """In a container with a CPU quota torch still counts the host's cores, and more threads than quota makes each
-    prediction several times slower. LAYA_TORCH_THREADS sets this at start; /admin/threads changes it while running."""
+    prediction several times slower. SERVICE_TORCH_THREADS sets this at start; /admin/threads changes it while running."""
     import torch
 
     torch.set_num_threads(threads)
@@ -105,16 +105,16 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
                tokens: TokenStore | None = None, updates: Updates | None = None, check_hours: float = 0,
                cache_size: int = 0, sync_seconds: float = 0, max_inflight: int | None = None,
                config: settings.Config | None = None) -> FastAPI:
-    """`admin_password` (LAYA_ADMIN_PASSWORD) unlocks /admin/, where each project gets a token of its own; when it
+    """`admin_password` (SERVICE_ADMIN_PASSWORD) unlocks /admin/, where each project gets a token of its own; when it
     is set, every call except /health must send one of those tokens in the X-Internal-Token header. Unset = no
-    auth at all (local use only). `tokens` holds the project tokens (LAYA_TOKENS_FILE). `check_hours` > 0 looks for
-    newer Laya releases that often (LAYA_UPDATE_CHECK_HOURS); it never downloads. `updates` is off with LAYA_OFFLINE=1.
-    `cache_size` > 0 keeps that many answers per replica (LAYA_CACHE_SIZE); `sync_seconds` > 0 makes the replica look
-    that often for weights another replica downloaded (LAYA_SYNC_SECONDS). `max_inflight` is how many /v1/ask calls may
-    wait for the models at once (LAYA_MAX_INFLIGHT, 0 = 4). `config` (the admin page's settings) replaces `warm`,
+    auth at all (local use only). `tokens` holds the project tokens (SERVICE_TOKENS_FILE). `check_hours` > 0 looks for
+    newer Laya releases that often (SERVICE_UPDATE_CHECK_HOURS); it never downloads. `updates` is off with SERVICE_OFFLINE=1.
+    `cache_size` > 0 keeps that many answers per replica (SERVICE_CACHE_SIZE); `sync_seconds` > 0 makes the replica look
+    that often for weights another replica downloaded (SERVICE_SYNC_SECONDS). `max_inflight` is how many /v1/ask calls may
+    wait for the models at once (SERVICE_MAX_INFLIGHT, 0 = 4). `config` (the admin page's settings) replaces `warm`,
     `check_hours`, `cache_size`, `sync_seconds` and `max_inflight` and keeps them live; without it they stay fixed."""
-    tokens = tokens or TokenStore(os.environ.get("LAYA_TOKENS_FILE", "tokens.json"))
-    offline = os.environ.get("LAYA_OFFLINE") == "1"
+    tokens = tokens or TokenStore(os.environ.get("SERVICE_TOKENS_FILE", "tokens.json"))
+    offline = os.environ.get("SERVICE_OFFLINE") == "1"
     registry = registry or Registry(offline=offline, config=config)
     updates = None if offline else updates or Updates(registry, marker=default_marker())
     cache = AnswerCache()
@@ -123,7 +123,7 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
     def inflight_limit() -> int:
         """Calls this replica lets wait for the models at once; more get 429. 0 = 4."""
         value = config.get("max_inflight") if config else (
-            max_inflight if max_inflight is not None else int(os.environ.get("LAYA_MAX_INFLIGHT") or 0))
+            max_inflight if max_inflight is not None else int(os.environ.get("SERVICE_MAX_INFLIGHT") or 0))
         return value or 4
 
     async def slot():
@@ -208,7 +208,7 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 
     def admin(x_internal_token: str = Header("")) -> None:
         if not admin_password or not hmac.compare_digest(x_internal_token, admin_password):
-            raise HTTPException(401, "Admin password required (set LAYA_ADMIN_PASSWORD)")
+            raise HTTPException(401, "Admin password required (set SERVICE_ADMIN_PASSWORD)")
 
     app = FastAPI(title="Laya service", lifespan=lifespan)
 
@@ -327,25 +327,25 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 
     @app.put("/admin/threads", dependencies=[Depends(admin)])
     def set_threads(body: Threads) -> dict[str, Any]:
-        """Applies to this replica now and is saved; the other replicas apply it within a few seconds. It beats LAYA_TORCH_THREADS."""
+        """Applies to this replica now and is saved; the other replicas apply it within a few seconds. It beats SERVICE_TORCH_THREADS."""
         _set_torch_threads(body.torch_threads)
         settings.save(tokens.settings_path, torch_threads=body.torch_threads)
         return {"torch_threads": _torch_threads()}
 
     @app.get("/admin/workers", dependencies=[Depends(admin)])
     def workers() -> dict[str, Any]:
-        """Read-only: replicas are a Docker Compose setting (LAYA_REPLICAS), which the service cannot change itself."""
-        replicas = os.environ.get("LAYA_REPLICAS", "").strip()
+        """Read-only: replicas are a Docker Compose setting (SERVICE_REPLICAS), which the service cannot change itself."""
+        replicas = os.environ.get("SERVICE_REPLICAS", "").strip()
         return {"replicas": int(replicas) if replicas.isdigit() else None}
 
     def enabled() -> Updates:
         if updates is None:
-            raise HTTPException(409, "Updates are off while LAYA_OFFLINE=1")
+            raise HTTPException(409, "Updates are off while SERVICE_OFFLINE=1")
         return updates
 
     @app.get("/admin/updates", dependencies=[Depends(admin)])
     def update_status() -> dict[str, Any]:
-        """The last check's result (no network); `enabled` is false with LAYA_OFFLINE=1."""
+        """The last check's result (no network); `enabled` is false with SERVICE_OFFLINE=1."""
         return {"enabled": updates is not None, **(updates.status() if updates else {})}
 
     @app.post("/admin/updates/check", dependencies=[Depends(admin)])
@@ -418,7 +418,7 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
             raise HTTPException(404, "No such token")
         return {"ok": True}
 
-    web = Path(os.environ.get("LAYA_WEB_DIR", Path(__file__).resolve().parents[1] / "web"))
+    web = Path(os.environ.get("SERVICE_WEB_DIR", Path(__file__).resolve().parents[1] / "web"))
     if web.is_dir():
         app.mount("/admin", StaticFiles(directory=web, html=True))
 
@@ -426,16 +426,35 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
 
 
 def main() -> None:
+    import sys
+
     import uvicorn
 
-    store = TokenStore(os.environ.get("LAYA_TOKENS_FILE", "tokens.json"))
+    if "--dotenv" in sys.argv[1:]:  # run.bat asks for it; a plain `python src/app.py` and Docker never read .env
+        env_file = Path(__file__).resolve().parents[1] / ".env"
+        if env_file.is_file():
+            names = settings.load_env_file(env_file)
+            print(f".env: loaded {', '.join(names) or 'no variables'} (names only; a real environment variable wins)", flush=True)
+        else:
+            print(".env: no file in the service folder", flush=True)
+    settings.apply_models_dir()  # SERVICE_MODELS_DIR -> HF_HOME / OLLAMA_MODELS
+
+    store = TokenStore(os.environ.get("SERVICE_TOKENS_FILE", "tokens.json"))
     config = settings.Config(store.settings_path, SETTINGS)
     saved = settings.load(store.settings_path)
-    threads = saved.get("torch_threads") or os.environ.get("LAYA_TORCH_THREADS", "").strip()
+    threads = saved.get("torch_threads") or os.environ.get("SERVICE_TORCH_THREADS", "").strip()
     if threads:  # before the models load
         _set_torch_threads(int(threads))
-    app = create_app(admin_password=os.environ.get("LAYA_ADMIN_PASSWORD") or None, tokens=store, config=config)
-    uvicorn.run(app, host=os.environ.get("LAYA_HOST", "127.0.0.1"), port=int(os.environ.get("LAYA_PORT", "9120")))
+    app = create_app(admin_password=os.environ.get("SERVICE_ADMIN_PASSWORD") or None, tokens=store, config=config)
+    host, port = os.environ.get("SERVICE_HOST", "127.0.0.1"), int(os.environ.get("SERVICE_PORT", "29220"))
+
+    class Server(uvicorn.Server):
+        async def startup(self, sockets=None):
+            await super().startup(sockets)  # after uvicorn's own "running on" line
+            shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+            print(f"INFO:     Admin page: http://{shown}:{port}/admin/", flush=True)
+
+    Server(uvicorn.Config(app, host=host, port=port)).run()
 
 
 if __name__ == "__main__":

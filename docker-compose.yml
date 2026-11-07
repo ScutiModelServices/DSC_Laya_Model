@@ -1,49 +1,59 @@
 # Laya service: N replicas behind one nginx address.
-# Start:  docker compose up -d --build          (callers use http://<host>:9120)
-# Scale:  LAYA_REPLICAS=3 docker compose up -d --build, then: docker compose restart laya_lb
+# Start:  docker compose up -d --build          (callers use http://<host>:29220)
+# Scale:  SERVICE_REPLICAS=3 docker compose up -d --build, then: docker compose restart dsc_laya_model_lb
 # Each replica holds its own copy of the models in RAM; the downloaded weights are shared in `models`.
 
-name: laya
+name: dsc_laya_model
 
 services:
-  laya:
+  dsc_laya_model:
     build: .
+    image: dsc_laya_model:latest
     restart: unless-stopped
-    mem_limit: ${LAYA_MEM_LIMIT:-0}  # 0 = no cap; a cap makes an out-of-memory kill stay inside this container
+    mem_limit: ${SERVICE_MEM_LIMIT:-0}  # 0 = no cap; a cap makes an out-of-memory kill stay inside this container
     stop_grace_period: 90s  # uvicorn lets running calls finish on SIGTERM; Docker's default 10 s would kill a long answer
     environment:
-      LAYA_ADMIN_PASSWORD: ${LAYA_ADMIN_PASSWORD:-}
-      LAYA_TORCH_THREADS: ${LAYA_TORCH_THREADS:-}
-      LAYA_REPLICAS: ${LAYA_REPLICAS:-1}  # shown read-only on /admin/
+      SERVICE_ADMIN_PASSWORD: ${SERVICE_ADMIN_PASSWORD:-}
+      SERVICE_TORCH_THREADS: ${SERVICE_TORCH_THREADS:-}
+      SERVICE_REPLICAS: ${SERVICE_REPLICAS:-1}  # shown read-only on /admin/
     volumes:
-      - models:/models
-      - tokens:/data
+      - dsc_laya_model_models:/models
+      - dsc_laya_model_data:/data
     deploy:
-      replicas: ${LAYA_REPLICAS:-1}
+      replicas: ${SERVICE_REPLICAS:-1}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9120/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:29220/health')"]
       interval: 15s
       timeout: 5s
       start_period: 300s
-    networks: [laya]
+    networks: [dsc_laya_model]
 
-  laya_lb:
+  dsc_laya_model_lb:
+    container_name: dsc_laya_model_lb
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - "${LAYA_PORT:-9120}:9120"
+      - "${SERVICE_PORT:-29220}:29220"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      laya:
+      dsc_laya_model:
         condition: service_healthy
-    networks: [laya]
+    networks:
+      dsc_laya_model:
+      citadel:
+        aliases: [dsc_laya_model_lb]
 
 volumes:
-  models:
-  tokens:
-
+  dsc_laya_model_models:
+    name: dsc_laya_model_models
+  dsc_laya_model_data:
+    name: dsc_laya_model_data
 # Laya knows nothing about its callers. A caller on the same Docker host reaches it through the published port
-# (http://host.docker.internal:9120), or joins the `laya_laya` network on its own side.
+# (http://host.docker.internal:29220), or joins the `laya_laya` network on its own side.
 networks:
-  laya:
+  dsc_laya_model:
+    name: dsc_laya_model
+  citadel:
+    name: citadel_core
+    external: true
