@@ -20,7 +20,7 @@ uv run python src/app.py
 `uv.lock` already pins torch to the CPU-only index on Linux and Windows, so no extra step is needed for a small install.
 
 ## Settings
-`run.bat` and `app.py` read the real environment, **not** `.env`. Set variables before starting:
+`run.bat` loads `.env` in this folder (copy `.env.example`); a real environment variable wins over it. Set variables in `.env` or in the environment before starting:
 
 | Variable | Default | Effect |
 |---|---|---|
