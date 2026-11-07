@@ -11,7 +11,7 @@ over the published port.
 
 ## 1. Publish the code (from your PC)
 
-Run `LayaModel\tools\deploy.bat`. Menu:
+Run `LayaModel\run.bat` and choose **Deploy** (or `run.bat deploy`). Menu:
 
 | Option | Does |
 |---|---|
@@ -21,7 +21,7 @@ Run `LayaModel\tools\deploy.bat`. Menu:
 | 4, 5 | Dry runs |
 | 6 | chown helper, if option 2 says `Permission denied` |
 
-Keep your own target in the git-ignored `tools\deploy.local.bat` (copy `tools\deploy.local.example.bat`), or override it with `DEPLOY_HOST`, `DEPLOY_DIR`, `DEPLOY_WEB_PORT` before running. Commit `main` first: publish
+Keep your own target in the git-ignored `tools\deploy.local.ini` (copy `tools\deploy.local.example.ini`), or override it with `DEPLOY_HOST`, `DEPLOY_DIR`, `DEPLOY_WEB_PORT` before running. Commit `main` first: publish
 reads committed `main`.
 
 ## 2. First-time setup on the box
@@ -118,9 +118,9 @@ docker compose restart laya_lb
 
 ## Releasing
 
-A plain publish (`tools\deploy.bat` option 1) only updates the `live` branch, so it is fine for test deploys. A release is a separate step: set `VERSION` (and `pyproject.toml` where it has a version, to the same number), commit, then run `tools\deploy.bat` option R or `py tools\publish_live.py --release`. That publishes to `live` and tags the `main` commit `vX.Y.Z` and the live commit `live-vX.Y.Z`. A version already released with different live files is refused, so bump `VERSION`. While a version is not officially released yet, add `--replace` to move its tags.
+A plain publish (`run.bat`, Deploy, option 1) only updates the `live` branch, so it is fine for test deploys. A release is a separate step: set `VERSION` (and `pyproject.toml` where it has a version, to the same number), commit, then run `run.bat`, Deploy, option R or `py tools\publish_live.py --release`. That publishes to `live` and tags the `main` commit `vX.Y.Z` and the live commit `live-vX.Y.Z`. A version already released with different live files is refused, so bump `VERSION`. While a version is not officially released yet, add `--replace` to move its tags.
 
-`tools\make_zip.bat` then builds `zip_versions\LayaModel-<VERSION>.zip` (no `tools/`, no git-ignored files, no older ZIPs; `.env.example` is included) and opens GitHub's new-release page for the tag.
+`run.bat`, Build the release ZIP, then builds `_zip_versions\LayaModel-<VERSION>.zip` (no `tools/`, no git-ignored files, no older ZIPs; `.env.example` is included) and opens GitHub's new-release page for the tag.
 
 ## Problems
 
@@ -128,5 +128,5 @@ A plain publish (`tools\deploy.bat` option 1) only updates the `live` branch, so
 |---|---|
 | Caller cannot reach Laya | Check the caller's URL and token, and that `curl http://<box-ip>:9120/health` works. |
 | nginx 502 after scaling or update | `docker compose restart laya_lb`. |
-| Permission denied on push | deploy.bat option 6. |
+| Permission denied on push | run.bat Deploy option 6. |
 | Port 9120 in use | Another Laya stack is running on the box (for example one built by a caller's own compose); both use 9120. |
