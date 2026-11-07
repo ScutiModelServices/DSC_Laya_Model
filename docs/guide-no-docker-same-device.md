@@ -33,6 +33,7 @@ uv run python src/app.py
 | `SERVICE_PROJECT_MODELS_DIR` | unset | Root containing finished `<project>/` checkpoints; empty disables them. |
 | `SERVICE_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines (minimum `1`); base engines stay separate. |
 | `SERVICE_PROJECT_WAIT_SECONDS` | `30` | Wait for a free project slot before answering `503`. |
+| `SERVICE_MODELS_DIR` | the library's default cache | Folder for downloaded model weights. Sets `HF_HOME` (and `OLLAMA_MODELS` to `<folder>\ollama`) at start; a real `HF_HOME` or `OLLAMA_MODELS` wins. Docker keeps weights in the `_models` volume and ignores it. |
 
 PowerShell: `$env:SERVICE_ADMIN_PASSWORD = "secret"; .\run.bat`
 Bash: `SERVICE_ADMIN_PASSWORD=secret python src/app.py`
