@@ -27,8 +27,8 @@ def predict_project(registry, project, call):
 
 
 def configured(tmp_path, monkeypatch, cap=2):
-    monkeypatch.setenv("LAYA_PROJECT_MODELS_DIR", str(tmp_path))
-    monkeypatch.setenv("LAYA_MAX_PROJECT_MODELS", str(cap))
+    monkeypatch.setenv("SERVICE_PROJECT_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("SERVICE_MAX_PROJECT_MODELS", str(cap))
     loads = []
     registry = Registry(lambda model: loads.append(model) or FakeEngine())
     return registry, TestClient(create_app(registry)), loads
@@ -57,7 +57,7 @@ def test_missing_or_incomplete_checkpoint_falls_back(tmp_path, monkeypatch, proj
 
 def test_unset_root_disables_projects_and_absent_project_is_not_fallback(tmp_path, monkeypatch):
     checkpoint(tmp_path, "demo")
-    monkeypatch.delenv("LAYA_PROJECT_MODELS_DIR", raising=False)
+    monkeypatch.delenv("SERVICE_PROJECT_MODELS_DIR", raising=False)
     http = TestClient(create_app(Registry(lambda model: FakeEngine())))
     for extra, fallback in [({"project": "demo"}, True), ({}, False)]:
         body = http.post("/v1/ask", json={**BODY, "strategy": "typed-only", **extra}).json()
@@ -98,8 +98,8 @@ def test_lru_keeps_recent_projects_and_never_evicts_base(tmp_path, monkeypatch):
 def test_busy_project_is_not_evicted_or_loaded_twice(tmp_path, monkeypatch):
     checkpoint(tmp_path, "a")
     checkpoint(tmp_path, "b")
-    monkeypatch.setenv("LAYA_PROJECT_MODELS_DIR", str(tmp_path))
-    monkeypatch.setenv("LAYA_MAX_PROJECT_MODELS", "1")
+    monkeypatch.setenv("SERVICE_PROJECT_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("SERVICE_MAX_PROJECT_MODELS", "1")
     entered, release = threading.Event(), threading.Event()
     loads = []
 
@@ -129,7 +129,7 @@ def test_offline_local_checkpoint_never_uses_hub_cache(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
     path = checkpoint(tmp_path, "demo")
-    monkeypatch.setenv("LAYA_PROJECT_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("SERVICE_PROJECT_MODELS_DIR", str(tmp_path))
     loaded = []
     monkeypatch.setitem(sys.modules, "laya", SimpleNamespace(load=lambda name: loaded.append(name) or FakeEngine()))
     monkeypatch.setattr(module, "cached_checkpoint", lambda name: pytest.fail("Local checkpoint reached Hub cache"))
@@ -139,7 +139,7 @@ def test_offline_local_checkpoint_never_uses_hub_cache(tmp_path, monkeypatch):
 
 def test_project_load_value_error_keeps_english_recovery_and_call_metadata(tmp_path, monkeypatch):
     path = checkpoint(tmp_path, "broken")
-    monkeypatch.setenv("LAYA_PROJECT_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("SERVICE_PROJECT_MODELS_DIR", str(tmp_path))
 
     def loader(model):
         if model == path:
@@ -187,7 +187,7 @@ def test_project_used_is_false_when_the_strategy_never_asks_typed(tmp_path, monk
 def test_all_slots_busy_past_the_wait_limit_is_a_503_not_a_hang(tmp_path, monkeypatch):
     checkpoint(tmp_path, "a")
     checkpoint(tmp_path, "b")
-    monkeypatch.setenv("LAYA_PROJECT_WAIT_SECONDS", "0.1")
+    monkeypatch.setenv("SERVICE_PROJECT_WAIT_SECONDS", "0.1")
     registry, http, _ = configured(tmp_path, monkeypatch, cap=1)
     with registry.project_model("a"):
         response = http.post("/v1/ask", json={**BODY, "strategy": "typed-only", "project": "b"})
@@ -196,7 +196,7 @@ def test_all_slots_busy_past_the_wait_limit_is_a_503_not_a_hang(tmp_path, monkey
 
 
 def test_negative_wait_is_refused(monkeypatch):
-    monkeypatch.setenv("LAYA_PROJECT_WAIT_SECONDS", "-1")
+    monkeypatch.setenv("SERVICE_PROJECT_WAIT_SECONDS", "-1")
     with pytest.raises(ValueError):
         Registry(lambda model: FakeEngine())
 
@@ -222,7 +222,7 @@ def test_replaced_checkpoint_files_are_loaded_again_once_idle(tmp_path, monkeypa
 
 def test_cache_is_not_reused_after_project_files_are_replaced(tmp_path, monkeypatch):
     checkpoint(tmp_path, "demo")
-    monkeypatch.setenv("LAYA_PROJECT_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("SERVICE_PROJECT_MODELS_DIR", str(tmp_path))
     http = TestClient(create_app(Registry(lambda model: FakeEngine()), cache_size=4))
     body = {**BODY, "strategy": "typed-only", "project": "demo"}
     assert http.post("/v1/ask", json=body).headers["X-Laya-Cache"] == "miss"

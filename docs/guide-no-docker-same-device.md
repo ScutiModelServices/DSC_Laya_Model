@@ -24,26 +24,26 @@ uv run python src/app.py
 
 | Variable | Default | Effect |
 |---|---|---|
-| `LAYA_HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` only if other devices must reach it. |
-| `LAYA_PORT` | `29220` | Port. |
-| `LAYA_ADMIN_PASSWORD` | empty | Unlocks `/admin/` and requires tokens on every call but `/health`. Empty = no auth. |
-| `LAYA_WARM` | `1` | Load both models at start. |
-| `LAYA_TORCH_THREADS` | torch decides | CPU thread cap. |
-| `LAYA_OFFLINE` | unset | `1` uses only downloaded weights. |
-| `LAYA_PROJECT_MODELS_DIR` | unset | Root containing finished `<project>/` checkpoints; empty disables them. |
-| `LAYA_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines (minimum `1`); base engines stay separate. |
-| `LAYA_PROJECT_WAIT_SECONDS` | `30` | Wait for a free project slot before answering `503`. |
+| `SERVICE_HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` only if other devices must reach it. |
+| `SERVICE_PORT` | `29220` | Port. |
+| `SERVICE_ADMIN_PASSWORD` | empty | Unlocks `/admin/` and requires tokens on every call but `/health`. Empty = no auth. |
+| `SERVICE_WARM` | `1` | Load both models at start. |
+| `SERVICE_TORCH_THREADS` | torch decides | CPU thread cap. |
+| `SERVICE_OFFLINE` | unset | `1` uses only downloaded weights. |
+| `SERVICE_PROJECT_MODELS_DIR` | unset | Root containing finished `<project>/` checkpoints; empty disables them. |
+| `SERVICE_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines (minimum `1`); base engines stay separate. |
+| `SERVICE_PROJECT_WAIT_SECONDS` | `30` | Wait for a free project slot before answering `503`. |
 
-PowerShell: `$env:LAYA_ADMIN_PASSWORD = "secret"; .\run.bat`
-Bash: `LAYA_ADMIN_PASSWORD=secret python src/app.py`
+PowerShell: `$env:SERVICE_ADMIN_PASSWORD = "secret"; .\run.bat`
+Bash: `SERVICE_ADMIN_PASSWORD=secret python src/app.py`
 
 ## Project checkpoints
 
 Train typed-decisions elsewhere, then copy the complete checkpoint to, for example, `D:/models/garrison/`.
-Set `$env:LAYA_PROJECT_MODELS_DIR = "D:/models"` in PowerShell before starting; Bash uses
-`LAYA_PROJECT_MODELS_DIR=/path/to/models uv run python src/app.py`.
+Set `$env:SERVICE_PROJECT_MODELS_DIR = "D:/models"` in PowerShell before starting; Bash uses
+`SERVICE_PROJECT_MODELS_DIR=/path/to/models uv run python src/app.py`.
 The [required checkpoint files](../README.md#project-checkpoints) must be present; no model downloads are made
-for projects, even with `LAYA_OFFLINE=1`.
+for projects, even with `SERVICE_OFFLINE=1`.
 
 Send `"project": "garrison"` with `/v1/ask`. Names match `^[a-z0-9][a-z0-9_-]{0,47}$` (otherwise 422).
 Only TYPED uses the project checkpoint; English stays base. Missing artifacts fall back; responses and usage
@@ -57,10 +57,10 @@ curl http://127.0.0.1:29220/health
 Expect `{"status": "ok", ...}`.
 
 ## Connect Citadel
-- Garrison outside Docker: in `Citadel/apps/garrison/.env` set `LAYA_SERVICE_URL=http://127.0.0.1:29220` and
-  `LAYA_TOKEN` (made on `http://127.0.0.1:29220/admin/` when a password is set).
-- Citadel in Docker, Laya on the host: start Laya with `LAYA_HOST=0.0.0.0` and point garrison at
-  `http://host.docker.internal:29220`. Citadel's compose sets `LAYA_SERVICE_URL` itself, so you must override it in
+- Garrison outside Docker: in `Citadel/apps/garrison/.env` set Laya connection URL to `http://127.0.0.1:29220` and
+  Laya project token (made on `http://127.0.0.1:29220/admin/` when a password is set).
+- Citadel in Docker, Laya on the host: start Laya with `SERVICE_HOST=0.0.0.0` and point garrison at
+  `http://host.docker.internal:29220`. Citadel's compose sets Laya connection URL itself, so you must override it in
   garrison's environment.
 
 ## Stop

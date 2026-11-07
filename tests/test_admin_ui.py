@@ -34,7 +34,7 @@ class PlaygroundEngine:
 
 @pytest.fixture
 def base_url():
-    config = Config(Path(os.environ["LAYA_TOKENS_FILE"]).with_name("settings.json"), SETTINGS)
+    config = Config(Path(os.environ["SERVICE_TOKENS_FILE"]).with_name("settings.json"), SETTINGS)
     config.set({"update_check_hours": 0, "sync_seconds": 0, "warm": False})
     app = create_app(Registry(lambda checkpoint: PlaygroundEngine(), config=config), PASSWORD, config=config)
     with socket.socket() as probe:

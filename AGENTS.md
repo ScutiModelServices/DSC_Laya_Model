@@ -1,6 +1,6 @@
 # DSC_Laya_Model
 
-Laya prediction models served over HTTP, behind the shared model-service admin page, tokens and settings. Port 29220, env prefix `LAYA_`, token prefix `laya_`.
+Laya prediction models served over HTTP, behind the shared model-service admin page, tokens and settings. Port 29220, env prefix `SERVICE_`, token prefix `laya_`.
 
 ## Agent instructions
 This file is the one instruction file for every coding agent; `CLAUDE.md` only imports it (`@AGENTS.md`). Edit this file, never `CLAUDE.md`.

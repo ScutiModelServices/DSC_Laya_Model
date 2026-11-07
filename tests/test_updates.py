@@ -75,7 +75,7 @@ def test_update_refuses_when_the_check_failed():
 
 def client(updates, offline=False, monkeypatch=None):
     if offline:
-        monkeypatch.setenv("LAYA_OFFLINE", "1")
+        monkeypatch.setenv("SERVICE_OFFLINE", "1")
     return TestClient(create_app(Registry(lambda c: FakeEngine()), "secret", updates=updates))
 
 

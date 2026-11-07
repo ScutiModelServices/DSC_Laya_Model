@@ -150,7 +150,7 @@ def test_torch_threads_are_reported_and_set_by_the_admin(monkeypatch):
 
 
 def test_workers_are_read_only_and_admin_only(monkeypatch):
-    monkeypatch.setenv("LAYA_REPLICAS", "3")
+    monkeypatch.setenv("SERVICE_REPLICAS", "3")
     c = TestClient(create_app(Registry(lambda checkpoint: FakeEngine()), "admin"))
     assert c.get("/admin/workers").status_code == 401
     assert c.get("/admin/workers", headers={"X-Internal-Token": "admin"}).json() == {"replicas": 3}
@@ -163,8 +163,8 @@ def test_main_prefers_saved_threads_over_environment(tmp_path, monkeypatch):
     from tokens import TokenStore
     store = TokenStore(tmp_path / "tokens.json")
     settings.save(store.settings_path, torch_threads=7)
-    monkeypatch.setenv("LAYA_TOKENS_FILE", str(tmp_path / "tokens.json"))
-    monkeypatch.setenv("LAYA_TORCH_THREADS", "2")
+    monkeypatch.setenv("SERVICE_TOKENS_FILE", str(tmp_path / "tokens.json"))
+    monkeypatch.setenv("SERVICE_TORCH_THREADS", "2")
     seen = []
     monkeypatch.setattr(app, "_set_torch_threads", seen.append)
     monkeypatch.setattr(app, "create_app", lambda **kw: object())

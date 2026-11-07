@@ -21,7 +21,7 @@ refusal before the first answer (413, 502, 503) is still a normal HTTP error; a 
 `{"type": "error", "status", "detail"}` and ends the stream. `stream` is not part of the cache key, so a streamed answer
 fills the cache for plain calls and the other way round; a kept answer is streamed back at once.
 
-When `LAYA_ADMIN_PASSWORD` is set, send a project token (made on `/admin/`) as `X-Internal-Token`. Errors: 422 bad request or question, 413 text longer
+When `SERVICE_ADMIN_PASSWORD` is set, send a project token (made on `/admin/`) as `X-Internal-Token`. Errors: 422 bad request or question, 413 text longer
 than the window, 502 no model could answer, 500 anything else. A 413 or 502 body is
 `{"detail": {"message", "calls"}}`, so the caller can still log the model calls that were made.
 
@@ -32,7 +32,7 @@ than the window, 502 no model could answer, 500 anything else. A 413 or 502 body
 ### Project checkpoints
 
 Training happens elsewhere. Copy a finished typed-decisions checkpoint into
-`<LAYA_PROJECT_MODELS_DIR>/<project>/`. Set the **Project models folder** on the admin Settings card (`LAYA_PROJECT_MODELS_DIR` for `run.bat`) to enable local project models;
+`<SERVICE_PROJECT_MODELS_DIR>/<project>/`. Set the **Project models folder** on the admin Settings card (`SERVICE_PROJECT_MODELS_DIR` for `run.bat`) to enable local project models;
 unset or empty disables them. The directory must contain `rl_agent_config.json`, `model.safetensors`,
 `encoder/config.json` and `tokenizer/tokenizer.json` and be loadable by `laya.load(path)`.
 
@@ -48,8 +48,8 @@ requested a project but used the base checkpoint. English calls and requests wit
 `project_used` is true only when a project checkpoint answered; it stays false if the strategy never asked the typed
 model (`english-only`, or English was sure), so a caller can tell the project was not consulted.
 
-`LAYA_MAX_PROJECT_MODELS` (default `2`, minimum `1`) bounds resident project engines per replica using LRU.
-Busy engines are not evicted; if all slots stay busy a request waits up to `LAYA_PROJECT_WAIT_SECONDS` (default `30`),
+`SERVICE_MAX_PROJECT_MODELS` (default `2`, minimum `1`) bounds resident project engines per replica using LRU.
+Busy engines are not evicted; if all slots stay busy a request waits up to `SERVICE_PROJECT_WAIT_SECONDS` (default `30`),
 then gets `503` with `Retry-After: 5`. Both base engines stay outside this cap.
 `/health` lists resident project names and paths in `project_models`. **Download new weights** remains Hub-only:
 it neither changes nor reloads local project checkpoints. Restart replicas after replacing a resident artifact.
@@ -76,7 +76,7 @@ pairwise comparison. Answers carry the pick, `answer_confidence`, `uncertain`,
 
 ## Admin page
 
-`/admin/` (password `LAYA_ADMIN_PASSWORD`): tokens with project scope, rate limit and expiry, usage numbers, CPU threads, the Settings card (update check hours, in-flight cap, weight sync, answers kept, project models and their folder, load at start), and the Updates card (**Check now** and **Download new weights**). New weights are downloaded once into the shared models volume; the other replicas notice within a few seconds and load them on their next request. `/metrics` (admin password) is Prometheus text per token. See [the web UI guide](docs/guide-web-ui.md).
+`/admin/` (password `SERVICE_ADMIN_PASSWORD`): tokens with project scope, rate limit and expiry, usage numbers, CPU threads, the Settings card (update check hours, in-flight cap, weight sync, answers kept, project models and their folder, load at start), and the Updates card (**Check now** and **Download new weights**). New weights are downloaded once into the shared models volume; the other replicas notice within a few seconds and load them on their next request. `/metrics` (admin password) is Prometheus text per token. See [the web UI guide](docs/guide-web-ui.md).
 
 ## Run
 
@@ -86,7 +86,7 @@ Local: `run.bat` (port 29220). Docker, with a load balancer:
 docker compose up -d --build
 ```
 
-`dsc_laya_model` runs `LAYA_REPLICAS` copies (default 1) behind an nginx (`dsc_laya_model_lb`, `least_conn`, one retry on
+`dsc_laya_model` runs `SERVICE_REPLICAS` copies (default 1) behind an nginx (`dsc_laya_model_lb`, `least_conn`, one retry on
 error/timeout). Each replica keeps its own models in RAM; downloaded weights are shared in the `dsc_laya_model_models`
 volume. After changing the replica count, run `docker compose restart dsc_laya_model_lb`. Full guide (first start, scaling,
 troubleshooting): [deployment.md](deployment.md).
@@ -100,8 +100,8 @@ troubleshooting): [deployment.md](deployment.md).
 
 ## Settings
 
-`LAYA_HOST` (127.0.0.1), `LAYA_PORT` (29220), `LAYA_ADMIN_PASSWORD` (unlocks `/admin/`; empty = no auth), `LAYA_WARM` (1 loads both models at start), `LAYA_TORCH_THREADS` (cap on torch CPU threads; `/health` reports the value in use),
-`LAYA_OFFLINE` (1 uses only already downloaded weights).
+`SERVICE_HOST` (127.0.0.1), `SERVICE_PORT` (29220), `SERVICE_ADMIN_PASSWORD` (unlocks `/admin/`; empty = no auth), `SERVICE_WARM` (1 loads both models at start), `SERVICE_TORCH_THREADS` (cap on torch CPU threads; `/health` reports the value in use),
+`SERVICE_OFFLINE` (1 uses only already downloaded weights).
 
 ## Tests
 
@@ -121,11 +121,11 @@ uv run pytest
 
 Every project reaches the service the same way: `POST /v1/ask` with a strategy.
 
-- **Garrison** (`apps/garrison/src/llm/laya_agent.py`, class `LAYAAgent`): set `LAYA_SERVICE_URL` and `LAYA_TOKEN` to a project token made on `/admin/`.
+- **Garrison** (`apps/garrison/src/llm/laya_agent.py`, class `LAYAAgent`): configure its Laya connection URL and a project token made on `/admin/`. Consumer configuration names belong to Citadel and are unchanged.
   Its triage flow asks for a strategy per question type and adds Jev for what the service could not settle,
   using `/v1/combine`, and checks questions with `/v1/validate`. Garrison loads no Laya model and keeps no copy of
   the question rules.
-- **Armory** keeps its `LAYA_URL`: it asks Garrison's triage agent, which asks this service.
+- **Armory** keeps its existing connection URL: it asks Garrison's triage agent, which asks this service.
 - Not yet moved: `ascension`, `chess`, `sortie` and `ClaudeRouters` still carry their own copy of Laya.
 
 ## License

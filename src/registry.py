@@ -52,7 +52,7 @@ def _stamp(checkpoint: str) -> tuple:
 
 
 class ProjectBusy(RuntimeError):
-    """Every project slot is in use and none freed within LAYA_PROJECT_WAIT_SECONDS."""
+    """Every project slot is in use and none freed within SERVICE_PROJECT_WAIT_SECONDS."""
 
 
 @dataclass
@@ -75,13 +75,13 @@ class Registry:
         self.generation = 0  # bumped when the base weights are reloaded; part of the answer cache key
         self._locks = {model: threading.Lock() for model in MODELS}
         self._config = config  # with one, the admin page can change the project settings at any time
-        self._fixed = {"project_models_dir": os.environ.get("LAYA_PROJECT_MODELS_DIR") or "",
-                       "max_project_models": int(os.environ.get("LAYA_MAX_PROJECT_MODELS", "2")),
-                       "project_wait_seconds": float(os.environ.get("LAYA_PROJECT_WAIT_SECONDS", "30"))}
+        self._fixed = {"project_models_dir": os.environ.get("SERVICE_PROJECT_MODELS_DIR") or "",
+                       "max_project_models": int(os.environ.get("SERVICE_MAX_PROJECT_MODELS", "2")),
+                       "project_wait_seconds": float(os.environ.get("SERVICE_PROJECT_WAIT_SECONDS", "30"))}
         if config is None and self._fixed["max_project_models"] < 1:
-            raise ValueError("LAYA_MAX_PROJECT_MODELS must be at least 1")
+            raise ValueError("SERVICE_MAX_PROJECT_MODELS must be at least 1")
         if config is None and self._fixed["project_wait_seconds"] < 0:
-            raise ValueError("LAYA_PROJECT_WAIT_SECONDS must not be negative")
+            raise ValueError("SERVICE_PROJECT_WAIT_SECONDS must not be negative")
         self._projects: OrderedDict[str, _ProjectEngine] = OrderedDict()
         self._project_guard = threading.Condition()
 
@@ -125,7 +125,7 @@ class Registry:
     def project_model(self, project: str | None):
         """Lease a local typed-decisions replacement, or the base model. Run in a worker thread.
 
-        When every slot is busy, wait up to LAYA_PROJECT_WAIT_SECONDS for one (then ProjectBusy) instead of exceeding
+        When every slot is busy, wait up to SERVICE_PROJECT_WAIT_SECONDS for one (then ProjectBusy) instead of exceeding
         the cap or evicting an engine in use.
         Slots are reserved under the cache guard; loading and inference use each engine's own lock.
         """

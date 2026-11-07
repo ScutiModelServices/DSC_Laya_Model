@@ -7,7 +7,7 @@ over the published port.
 ## Requirements on the box
 
 - Docker + Compose v2, ssh access (root over ssh is refused; use the normal user).
-- Enough RAM for the models times `LAYA_REPLICAS`.
+- Enough RAM for the models times `SERVICE_REPLICAS`.
 
 ## 1. Publish the code (from your PC)
 
@@ -32,9 +32,9 @@ git clone -b live <your-repo-url> /media/ZimaOS-HD/Apps/DSC_Laya_Model
 cd /media/ZimaOS-HD/Apps/DSC_Laya_Model
 ```
 Create `.env` (deploy option 2 copies yours, or `cp .env.example .env` and edit):
-- `LAYA_ADMIN_PASSWORD`: a real password.
-- `LAYA_REPLICAS=1` on a small box.
-- `LAYA_PORT=29220` (published on all interfaces by this compose file; firewall it if the LAN should not reach it,
+- `SERVICE_ADMIN_PASSWORD`: a real password.
+- `SERVICE_REPLICAS=1` on a small box.
+- `SERVICE_PORT=29220` (published on all interfaces by this compose file; firewall it if the LAN should not reach it,
   or bind it to `127.0.0.1` in the `ports:` line when only callers on the box need it).
 
 ## 3. Start
@@ -52,7 +52,7 @@ First start downloads weights into the `dsc_laya_model_models` volume; `dsc_laya
 2. The caller holds the URL and token. Laya never references it:
    - Caller on another machine: `http://<box-ip>:29220`.
    - Caller in a Docker stack on the same box: `http://host.docker.internal:29220`.
-   - Citadel: set `LAYA_SERVICE_URL` and `LAYA_TOKEN` on the Citadel side, then run `docker compose up -d` there
+   - Citadel: set Laya connection URL and Laya project token on the Citadel side, then run `docker compose up -d` there
      (not `restart`; `restart` does not reload `env_file`).
 
 ## Project checkpoints
@@ -68,7 +68,7 @@ docker compose cp ./garrison laya:/models/projects/garrison
 
 See [required files](../README.md#project-checkpoints). Send `"project": "garrison"` with `/v1/ask`;
 names match `^[a-z0-9][a-z0-9_-]{0,47}$` or return 422. A project replaces only TYPED; English stays base.
-Missing artifacts fall back; `model`, `fallback` and `project_used` report actual selection. `LAYA_MAX_PROJECT_MODELS` defaults
+Missing artifacts fall back; `model`, `fallback` and `project_used` report actual selection. `SERVICE_MAX_PROJECT_MODELS` defaults
 to `2` per replica, on top of the base engines. `/health` lists resident `project_models`.
 Hub weight downloads never touch local artifacts. Restart replicas after replacing a loaded checkpoint.
 
@@ -99,7 +99,7 @@ artifacts. Restart replicas after replacing an already loaded project checkpoint
 ### Replica count
 
 ```bash
-LAYA_REPLICAS=3 docker compose up -d --build
+SERVICE_REPLICAS=3 docker compose up -d --build
 docker compose restart dsc_laya_model_lb
 ```
 
