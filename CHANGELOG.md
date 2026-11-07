@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Admin page: **Connect to this service** card with the addresses other services can use (this page's address, same PC, Docker network, `host.docker.internal`) and every endpoint, each with a Copy button.
 - Admin **Try it** panel: descriptor-driven public API requests, live text streams, JSON/media output, status and latency, cancellation and redacted curl. Auth choice (b): pasted public token stays in memory; normal scope, limits and caches apply. Shared `web/playground.js` is copied across all model and tool services.
 
 - `run.bat`: runs `uv sync` directly; `python -m uv` failed when uv was installed only as a program (winget).

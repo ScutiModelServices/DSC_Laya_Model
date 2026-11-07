@@ -347,3 +347,15 @@ def test_playground_pretty_json_cutoff_never_exposes_credential_prefix(page):
         return playground.output.textContent.slice(-30);
     }""")
     assert "abcde" not in ending
+
+
+def test_connect_card_lists_the_addresses_other_services_can_use(page):
+    page.fill("#admin", PASSWORD)
+    page.click("#signin-button")
+    sync_api.expect(page.locator("#dashboard")).to_be_visible()
+    card = page.locator("#connect-card")
+    sync_api.expect(card).to_contain_text("The address you opened this page with")
+    sync_api.expect(card).to_contain_text("host.docker.internal")
+    sync_api.expect(card).to_contain_text("/health")
+    port = page.url.split(":")[2].split("/")[0]
+    sync_api.expect(card).to_contain_text("http://127.0.0.1:" + port)
