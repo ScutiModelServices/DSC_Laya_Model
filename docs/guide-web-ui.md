@@ -11,6 +11,7 @@ same device, Docker on a deployment device, no Docker). Only the address differs
 If `LAYA_PORT` is changed, use that port.
 
 ## Before you open it
+
 The page needs the admin password: the value of `LAYA_ADMIN_PASSWORD`.
 - Docker: set it in `.env` next to `docker-compose.yml`, then `docker compose up -d`.
 - No Docker: set it in the environment before starting the service (`run.bat` / `uvicorn`); the service reads the
@@ -19,6 +20,7 @@ The page needs the admin password: the value of `LAYA_ADMIN_PASSWORD`.
   one to use the page.
 
 ## Sign in and service status
+
 Type the admin password and press **Sign in**. A wrong password shows an inline `Wrong admin password` error.
 The password stays in `sessionStorage` for this browser tab, so reloading restores the session. **Sign out** clears
 the password and any freshly created token. If browser storage is blocked, sign in again after reloading.
@@ -29,6 +31,7 @@ Tiles show models loaded out of the total, replicas, CPU threads, and active tok
 Use **Theme** to cycle between system, light, and dark appearance; this preference is saved in the browser.
 
 ## Tokens
+
 Each calling project gets its own token, so one can be revoked without touching the others.
 - **Create:** type a project name (up to 64 characters) and press **Create token**. The token appears once in
   an accent-tinted box with a **Copy** button and the reminder “Shown once. Copy it before you leave.”
@@ -53,6 +56,7 @@ Tokens live in `tokens.json` (`LAYA_TOKENS_FILE`). In Docker that is the `tokens
 are enforced only while `LAYA_ADMIN_PASSWORD` is set.
 
 ## Torch CPU threads
+
 Use the synchronized slider or number field, then **Apply**. Both accept 1 to 256. Apply is disabled and
 shows a busy indicator during saving; a short **Saved** confirmation follows. The page states:
 “Saved to settings.json. Other replicas apply it within a few seconds.”
@@ -67,6 +71,7 @@ shows a busy indicator during saving; a short **Saved** confirmation follows. Th
 - `GET /health` reports the value in use as `torch_threads`.
 
 ## Replicas (read-only)
+
 The replicas tile and muted line **Replicas: N. Change LAYA_REPLICAS in .env, then rebuild.** show `LAYA_REPLICAS`.
 The page cannot change it; each replica loads its own copy of the models, so it multiplies RAM. To change it, set `LAYA_REPLICAS` in `.env`, then:
 ```bash
@@ -76,6 +81,7 @@ docker compose restart laya_lb
 `Replicas: unknown` means the variable is not set, which is normal without Docker.
 
 ## Problems
+
 | Symptom | Fix |
 |---|---|
 | Page does not load | Service not running, wrong port, or blocked by a firewall. Test `/health`. |
@@ -101,6 +107,17 @@ When you create a token you can list the projects it may use (comma separated; e
 ## Settings
 
 The **Settings** card changes options without editing `.env` or restarting: update-check interval, caches and limits, and similar. Each row shows where its value comes from (saved, environment or default). A value saved here beats the environment variable; **Reset** removes it. Every replica reads the shared settings file, so a change applies within a few seconds. Rows marked "applies after a restart" are read once at start. The admin password, ports, replica count and other Docker settings stay in `.env` or the compose file, because the service cannot change its own container.
+
+## Settings on the admin page
+
+These are edited on the **Settings** card of `/admin/` and saved in `settings.json` beside the tokens, so all replicas share them: `LAYA_UPDATE_CHECK_HOURS`, `LAYA_MAX_INFLIGHT`, `LAYA_SYNC_SECONDS`, `LAYA_CACHE_SIZE`, `LAYA_MAX_PROJECT_MODELS`, `LAYA_PROJECT_WAIT_SECONDS`, `LAYA_PROJECT_MODELS_DIR` and `LAYA_WARM` (the last is read at start). A saved value beats the environment variable. The compose file no longer passes them, so a `.env` value only applies if you add the variable under `environment:` of `laya`. Still in `.env`: `LAYA_ADMIN_PASSWORD`, `LAYA_PORT`, `LAYA_REPLICAS`, `LAYA_TORCH_THREADS` (a starting value for the CPU threads card) and `LAYA_OFFLINE`.
+
+## Updating the models
+
+The **Updates** card shows the installed `laya` package and each weights repository next to the newest one, and flags what is newer. **Check now** looks right away; the replicas also check every `LAYA_UPDATE_CHECK_HOURS`.
+
+- **Weights:** **Download new weights** fetches the newest revision from the Hub into the shared `models` volume and reloads the models on the replica that took the click. The other replicas notice within `LAYA_SYNC_SECONDS` and reload them themselves; the models are loaded again, so each replica needs RAM for the old and new copy for a moment. The download is the Hub's current `main`, not the reviewed SHA in `laya.revisions.PINNED_REVISIONS`; set `LAYA_REVISION=reviewed` to pin a deployment to the reviewed one.
+- **Package:** only reported. A running container cannot change its own install: run `uv lock --upgrade-package laya`, then `docker compose up -d --build` and `docker compose restart laya_lb`.
 
 ## Connect to this service
 

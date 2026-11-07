@@ -74,6 +74,10 @@ replaces single ones. `prune_ratio` (0.25; 0 never drops options) and `pair_rati
 pairwise comparison. Answers carry the pick, `answer_confidence`, `uncertain`,
 `answered_by`; `trace: true` adds `rounds`. No strategy calls a cloud model.
 
+## Admin page
+
+`/admin/` (password `LAYA_ADMIN_PASSWORD`): tokens with project scope, rate limit and expiry, usage numbers, CPU threads, the Settings card (update check hours, in-flight cap, weight sync, answers kept, project models and their folder, load at start), and the Updates card (**Check now** and **Download new weights**). New weights are downloaded once into the shared models volume; the other replicas notice within a few seconds and load them on their next request. `/metrics` (admin password) is Prometheus text per token. See [the web UI guide](docs/guide-web-ui.md).
+
 ## Run
 
 Local: `run.bat` (port 9120). Docker, with a load balancer:
@@ -99,6 +103,20 @@ troubleshooting): [deployment.md](deployment.md).
 `LAYA_HOST` (127.0.0.1), `LAYA_PORT` (9120), `LAYA_ADMIN_PASSWORD` (unlocks `/admin/`; empty = no auth), `LAYA_WARM` (1 loads both models at start), `LAYA_TORCH_THREADS` (cap on torch CPU threads; `/health` reports the value in use),
 `LAYA_OFFLINE` (1 uses only already downloaded weights).
 
+## Tests
+
+```bash
+uv sync
+uv run pytest
+```
+
+## Limits worth knowing
+
+- More than the in-flight cap (`max_inflight`) waiting calls get 429 with `Retry-After: 5`.
+- The rate limit and the answer cache are per replica, and each replica keeps its own models in RAM.
+- At most `max_project_models` project checkpoints stay loaded; a call waits up to `project_wait_seconds` for a free slot.
+- No strategy calls a cloud model.
+
 ## Consumers
 
 Every project reaches the service the same way: `POST /v1/ask` with a strategy.
@@ -115,9 +133,12 @@ Every project reaches the service the same way: `POST /v1/ask` with a strategy.
 The service code is MIT. The `laya` package and the Laya weights it downloads are by Convai Innovations
 under Apache-2.0; read their terms before redistributing the weights. See [LICENSE](LICENSE) and [CHANGELOG.md](CHANGELOG.md).
 
-
 ## Try it from the admin page
 
 Open `/admin/` and use **Try it** to call the public API with a service token held only in memory. Runs use normal token scopes, limits and caches; the panel shows HTTP status, latency, responses, cancellation and a curl equivalent with a token placeholder. See [the web UI guide](docs/guide-web-ui.md#try-it-send-a-real-request).
 
 Ask sends `text` and a questions JSON object to `POST /v1/ask`, with the selected strategy and optional project. Streaming appends one NDJSON answer event per question. The operation menu also exposes question validation, vote combination and the strategy list.
+
+## Documentation
+
+- [Purpose: input, output and what it is for](docs/purpose.md)
