@@ -15,7 +15,7 @@ Run the service in Docker on the machine you work on (your PC), so other program
    ```bash
    cp .env.example .env
    ```
-   Set `LAYA_ADMIN_PASSWORD` (empty = no auth, fine for local-only use). Leave `LAYA_PORT=9120`, `LAYA_REPLICAS=1`.
+   Set `LAYA_ADMIN_PASSWORD` (empty = no auth, fine for local-only use). Leave `LAYA_PORT=29220`, `LAYA_REPLICAS=1`.
 2. Start:
    ```bash
    docker compose up -d --build
@@ -24,13 +24,13 @@ Run the service in Docker on the machine you work on (your PC), so other program
    (up to 120 s grace). Watch with `docker compose ps` and `docker compose logs -f dsc_laya_model`.
 3. Check:
    ```bash
-   curl http://127.0.0.1:9120/health
+   curl http://127.0.0.1:29220/health
    ```
    Expect `{"status": "ok", ...}` with both models `true`.
-4. Tokens: if you set a password, open `http://127.0.0.1:9120/admin/` and make a token for each caller.
+4. Tokens: if you set a password, open `http://127.0.0.1:29220/admin/` and make a token for each caller.
 5. Callers connect to the published port. Laya does not depend on any caller; the caller holds the URL and token:
-   - Caller on the host: `http://127.0.0.1:9120`.
-   - Caller in another Docker stack on the same host: `http://host.docker.internal:9120`.
+   - Caller on the host: `http://127.0.0.1:29220`.
+   - Caller in another Docker stack on the same host: `http://host.docker.internal:29220`.
    - Citadel: set `LAYA_SERVICE_URL` and `LAYA_TOKEN` on the Citadel side.
 
 ## Project checkpoints
@@ -56,7 +56,7 @@ Hub weight downloads leave local artifacts alone; restart after replacing one al
 |---|---|---|
 | `LAYA_REPLICAS` | `1` | Number of `dsc_laya_model` containers. Read by Compose, not the service. |
 | `LAYA_MEM_LIMIT` | `0` (no cap) | RAM cap per container, for example `4g`. An out-of-memory kill then stays in the container instead of starving the host. Read by Compose. |
-| `LAYA_PORT` | `9120` | Host port `dsc_laya_model_lb` publishes. Inside the containers the service always listens on 9120. |
+| `LAYA_PORT` | `29220` | Host port `dsc_laya_model_lb` publishes. Inside the containers the service always listens on 29220. |
 | `LAYA_ADMIN_PASSWORD` | empty | Password for the `/admin/` page, where per-project tokens are made. When set, every call except `/health` must send one of those tokens as `X-Internal-Token` (Garrison: `LAYA_TOKEN` in `apps/garrison/.env`). Empty = no auth. |
 | `LAYA_WARM` | `1` | Load both models at start (also on the Settings card). With it off the first request pays the load time. |
 | `LAYA_TORCH_THREADS` | torch decides | Cap on torch CPU threads; `/health` reports the value in use, `/admin/` can change it and saves the value (other replicas apply it within a few seconds). Use the number of physical cores (`lscpu`: cores x sockets), not logical CPUs; more threads than cores slows every call. |
@@ -73,7 +73,7 @@ Put the variables in a `.env` next to the compose file that runs the stack (this
 
 ## Callers
 
-A caller needs only the URL and a token. From a container on the same host use `http://host.docker.internal:9120`;
+A caller needs only the URL and a token. From a container on the same host use `http://host.docker.internal:29220`;
 Citadel's legion does this through `LAYA_SERVICE_URL` in `apps/legion/.env`. Citadel's compose does not start or build
 this service, so the two folders can sit anywhere and be started in any order.
 
@@ -89,13 +89,13 @@ this service, so the two folders can sit anywhere and be started in any order.
 ## Check it works
 
 ```bash
-curl http://127.0.0.1:9120/health
+curl http://127.0.0.1:29220/health
 ```
 
 Expect `{"status": "ok", "models": {...}}` with both models `true` once warmed. `/health` needs no token.
 
 ```bash
-curl -X POST http://127.0.0.1:9120/v1/validate -H "Content-Type: application/json" -H "X-Internal-Token: <token>" -d "{\"questions\": []}"
+curl -X POST http://127.0.0.1:29220/v1/validate -H "Content-Type: application/json" -H "X-Internal-Token: <token>" -d "{\"questions\": []}"
 ```
 
 A 422 means the service is up and checking requests (an empty question set is invalid). Omit the token header when
@@ -114,14 +114,14 @@ docker compose up -d --build && docker compose restart dsc_laya_model_lb   # aft
 
 | Symptom | Fix |
 |---|---|
-| `address already in use` on 9120 | Another Laya (a caller's own stack or `run.bat`) is running. Stop it or change `LAYA_PORT`. |
+| `address already in use` on 29220 | Another Laya (a caller's own stack or `run.bat`) is running. Stop it or change `LAYA_PORT`. |
 | Replicas restart in a loop | Out of RAM. Lower `LAYA_REPLICAS`. |
 | 401 Invalid token | Caller token missing or revoked; make one on `/admin/`. |
 | `dsc_laya_model_lb` never starts | No replica is healthy yet (first download, or out of memory). Check `docker compose logs dsc_laya_model`. |
 | Garrison: "Laya is not configured: set LAYA_SERVICE_URL" | `LAYA_SERVICE_URL` is empty (running outside Compose and not set). |
 | Garrison: "could not be reached" | Service not started, or Garrison's `LAYA_SERVICE_URL` does not point at it. |
-| `bind: address already in use` on 9120 | Another process holds the port. Stop it, or set `LAYA_PORT`. |
+| `bind: address already in use` on 29220 | Another process holds the port. Stop it, or set `LAYA_PORT`. |
 | nginx 502 after scaling | `dsc_laya_model_lb` not restarted after the replica count changed. |
 | Offline start fails to load a model | `LAYA_OFFLINE=1` but the weights are not in the `dsc_laya_model_models` volume yet. |
 
-The load balancer also joins external `citadel_core` as `dsc_laya_model_lb`. Start the Citadel stack first so that network exists; tool services on it use `http://dsc_laya_model_lb:9120`. Docker project and API image are `dsc_laya_model` and `dsc_laya_model:latest`; persistent volumes have explicit `dsc_laya_model_*` names. Volume migration and rollback instructions are in [CHANGELOG.md](../CHANGELOG.md).
+The load balancer also joins external `citadel_core` as `dsc_laya_model_lb`. Start the Citadel stack first so that network exists; tool services on it use `http://dsc_laya_model_lb:29220`. Docker project and API image are `dsc_laya_model` and `dsc_laya_model:latest`; persistent volumes have explicit `dsc_laya_model_*` names. Volume migration and rollback instructions are in [CHANGELOG.md](../CHANGELOG.md).

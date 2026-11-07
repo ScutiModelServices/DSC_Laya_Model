@@ -1,6 +1,6 @@
 # DSC_Laya_Model: without Docker, same device
 
-Run the service directly with Python. One process, no load balancer, listens on `127.0.0.1:9120`.
+Run the service directly with Python. One process, no load balancer, listens on `127.0.0.1:29220`.
 
 ## Requirements
 - Python 3.11 or newer.
@@ -25,7 +25,7 @@ uv run python src/app.py
 | Variable | Default | Effect |
 |---|---|---|
 | `LAYA_HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` only if other devices must reach it. |
-| `LAYA_PORT` | `9120` | Port. |
+| `LAYA_PORT` | `29220` | Port. |
 | `LAYA_ADMIN_PASSWORD` | empty | Unlocks `/admin/` and requires tokens on every call but `/health`. Empty = no auth. |
 | `LAYA_WARM` | `1` | Load both models at start. |
 | `LAYA_TORCH_THREADS` | torch decides | CPU thread cap. |
@@ -52,19 +52,19 @@ checkpoint; **Download new weights** only handles Hub models.
 
 ## Check
 ```bash
-curl http://127.0.0.1:9120/health
+curl http://127.0.0.1:29220/health
 ```
 Expect `{"status": "ok", ...}`.
 
 ## Connect Citadel
-- Garrison outside Docker: in `Citadel/apps/garrison/.env` set `LAYA_SERVICE_URL=http://127.0.0.1:9120` and
-  `LAYA_TOKEN` (made on `http://127.0.0.1:9120/admin/` when a password is set).
+- Garrison outside Docker: in `Citadel/apps/garrison/.env` set `LAYA_SERVICE_URL=http://127.0.0.1:29220` and
+  `LAYA_TOKEN` (made on `http://127.0.0.1:29220/admin/` when a password is set).
 - Citadel in Docker, Laya on the host: start Laya with `LAYA_HOST=0.0.0.0` and point garrison at
-  `http://host.docker.internal:9120`. Citadel's compose sets `LAYA_SERVICE_URL` itself, so you must override it in
+  `http://host.docker.internal:29220`. Citadel's compose sets `LAYA_SERVICE_URL` itself, so you must override it in
   garrison's environment.
 
 ## Stop
-Ctrl+C in the terminal. Do not run this and the Docker stack together: both use port 9120.
+Ctrl+C in the terminal. Do not run this and the Docker stack together: both use port 29220.
 
 ## Tests
 `uv run pytest`.

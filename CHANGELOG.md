@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Default HTTP port moves from 9120 to 29220. Update explicit old ports in your real `.env`, saved tool-service `backends.json` connections, and browser/MCP client configurations once. Compose now uses 29220 inside API replicas and nginx; deployments using the old Compose default must recreate containers. A custom host-port override stays in effect until you change it; container ports still move to 29220.
+
 - Renamed `LayaModel` to `DSC_Laya_Model`; Docker project, API image, services, load balancer and volumes now use `dsc_laya_model` names. Callers on `citadel_core` connect to `dsc_laya_model_lb` at the existing port.
 - Docker volume migration: existing volumes with old names are orphaned; renaming does not move data. Stop the old stack before copying; never use `down -v`. The commands below assume the previous default Compose project name; substitute actual volume names if `-p` or `COMPOSE_PROJECT_NAME` overrode it.
   - `laya_models` → `dsc_laya_model_models`: `docker volume inspect laya_models && docker volume create dsc_laya_model_models && docker run --rm -v laya_models:/from:ro -v dsc_laya_model_models:/to alpine:3.21 sh -c "cd /from && cp -a . /to/"`

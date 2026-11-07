@@ -5,8 +5,8 @@ same device, Docker on a deployment device, no Docker). Only the address differs
 
 | Run | Address |
 |---|---|
-| Docker or `run.bat` on this PC | `http://127.0.0.1:9120/admin/` |
-| Docker on the deployment box | `http://<box-ip>:9120/admin/` |
+| Docker or `run.bat` on this PC | `http://127.0.0.1:29220/admin/` |
+| Docker on the deployment box | `http://<box-ip>:29220/admin/` |
 
 If `LAYA_PORT` is changed, use that port.
 
@@ -88,7 +88,7 @@ docker compose restart dsc_laya_model_lb
 | `Admin password required (set LAYA_ADMIN_PASSWORD)` | The password is empty. Set it and restart. |
 | Token lost | Revoke it and create a new one. |
 | Thread change not on every replica | Replicas read the saved value every second from the shared `/data` volume; check `torch_threads` in `/health` on each. |
-| Page works over plain `http` only | Expected on a LAN. Never expose port 9120 to the internet. |
+| Page works over plain `http` only | Expected on a LAN. Never expose port 29220 to the internet. |
 
 ## Limiting a token to projects
 

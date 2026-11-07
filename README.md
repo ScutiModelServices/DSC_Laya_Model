@@ -80,7 +80,7 @@ pairwise comparison. Answers carry the pick, `answer_confidence`, `uncertain`,
 
 ## Run
 
-Local: `run.bat` (port 9120). Docker, with a load balancer:
+Local: `run.bat` (port 29220). Docker, with a load balancer:
 
 ```bash
 docker compose up -d --build
@@ -100,7 +100,7 @@ troubleshooting): [deployment.md](deployment.md).
 
 ## Settings
 
-`LAYA_HOST` (127.0.0.1), `LAYA_PORT` (9120), `LAYA_ADMIN_PASSWORD` (unlocks `/admin/`; empty = no auth), `LAYA_WARM` (1 loads both models at start), `LAYA_TORCH_THREADS` (cap on torch CPU threads; `/health` reports the value in use),
+`LAYA_HOST` (127.0.0.1), `LAYA_PORT` (29220), `LAYA_ADMIN_PASSWORD` (unlocks `/admin/`; empty = no auth), `LAYA_WARM` (1 loads both models at start), `LAYA_TORCH_THREADS` (cap on torch CPU threads; `/health` reports the value in use),
 `LAYA_OFFLINE` (1 uses only already downloaded weights).
 
 ## Tests

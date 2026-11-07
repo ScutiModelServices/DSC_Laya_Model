@@ -1,7 +1,7 @@
 # Deploying DSC_Laya_Model
 
-DSC_Laya_Model is one HTTP service (port 9120) that owns the Laya models. It runs as `dsc_laya_model` replicas behind an nginx
-load balancer, `dsc_laya_model_lb`. Callers use `http://<host>:9120`; they never reach a replica directly.
+DSC_Laya_Model is one HTTP service (port 29220) that owns the Laya models. It runs as `dsc_laya_model` replicas behind an nginx
+load balancer, `dsc_laya_model_lb`. Callers use `http://<host>:29220`; they never reach a replica directly.
 
 It is its own Docker stack. Other projects (Citadel's legion, for example) call it over HTTP and never build or start it.
 

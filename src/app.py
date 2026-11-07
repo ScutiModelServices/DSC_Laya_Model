@@ -445,7 +445,7 @@ def main() -> None:
     if threads:  # before the models load
         _set_torch_threads(int(threads))
     app = create_app(admin_password=os.environ.get("LAYA_ADMIN_PASSWORD") or None, tokens=store, config=config)
-    uvicorn.run(app, host=os.environ.get("LAYA_HOST", "127.0.0.1"), port=int(os.environ.get("LAYA_PORT", "9120")))
+    uvicorn.run(app, host=os.environ.get("LAYA_HOST", "127.0.0.1"), port=int(os.environ.get("LAYA_PORT", "29220")))
 
 
 if __name__ == "__main__":

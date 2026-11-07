@@ -1,5 +1,5 @@
 @echo off
-REM Starts the Laya service on port 9120 (syncs .venv with uv on each run).
+REM Starts the Laya service on port 29220 (syncs .venv with uv on each run).
 REM LABEL: Laya Service
 REM DESCRIPTION: Shared HTTP service that owns the Laya models for every project.
 cd /d "%~dp0"

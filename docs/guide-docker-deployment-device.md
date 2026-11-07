@@ -34,7 +34,7 @@ cd /media/ZimaOS-HD/Apps/DSC_Laya_Model
 Create `.env` (deploy option 2 copies yours, or `cp .env.example .env` and edit):
 - `LAYA_ADMIN_PASSWORD`: a real password.
 - `LAYA_REPLICAS=1` on a small box.
-- `LAYA_PORT=9120` (published on all interfaces by this compose file; firewall it if the LAN should not reach it,
+- `LAYA_PORT=29220` (published on all interfaces by this compose file; firewall it if the LAN should not reach it,
   or bind it to `127.0.0.1` in the `ports:` line when only callers on the box need it).
 
 ## 3. Start
@@ -42,16 +42,16 @@ Create `.env` (deploy option 2 copies yours, or `cp .env.example .env` and edit)
 ```bash
 docker compose up -d --build
 docker compose ps
-curl http://127.0.0.1:9120/health
+curl http://127.0.0.1:29220/health
 ```
 First start downloads weights into the `dsc_laya_model_models` volume; `dsc_laya_model_lb` waits for a healthy replica.
 
 ## 4. Connect callers
 
-1. Open `http://<box-ip>:9120/admin/`, log in with the admin password, create one token per caller.
+1. Open `http://<box-ip>:29220/admin/`, log in with the admin password, create one token per caller.
 2. The caller holds the URL and token. Laya never references it:
-   - Caller on another machine: `http://<box-ip>:9120`.
-   - Caller in a Docker stack on the same box: `http://host.docker.internal:9120`.
+   - Caller on another machine: `http://<box-ip>:29220`.
+   - Caller in a Docker stack on the same box: `http://host.docker.internal:29220`.
    - Citadel: set `LAYA_SERVICE_URL` and `LAYA_TOKEN` on the Citadel side, then run `docker compose up -d` there
      (not `restart`; `restart` does not reload `env_file`).
 
@@ -126,7 +126,7 @@ A plain publish (`run.bat`, Deploy, option 1) only updates the `live` branch, so
 
 | Symptom | Fix |
 |---|---|
-| Caller cannot reach Laya | Check the caller's URL and token, and that `curl http://<box-ip>:9120/health` works. |
+| Caller cannot reach Laya | Check the caller's URL and token, and that `curl http://<box-ip>:29220/health` works. |
 | nginx 502 after scaling or update | `docker compose restart dsc_laya_model_lb`. |
 | Permission denied on push | run.bat Deploy option 6. |
-| Port 9120 in use | Another Laya stack is running on the box (for example one built by a caller's own compose); both use 9120. |
+| Port 29220 in use | Another Laya stack is running on the box (for example one built by a caller's own compose); both use 29220. |

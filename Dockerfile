@@ -11,5 +11,6 @@ RUN python -c "import torch; assert torch.version.cuda is None and torch.version
 COPY src ./src
 COPY web ./web
 
-EXPOSE 9120
+ENV LAYA_PORT=29220
+EXPOSE 29220
 CMD ["python", "src/app.py"]
