@@ -168,7 +168,7 @@ def test_main_prefers_saved_threads_over_environment(tmp_path, monkeypatch):
     seen = []
     monkeypatch.setattr(app, "_set_torch_threads", seen.append)
     monkeypatch.setattr(app, "create_app", lambda **kw: object())
-    monkeypatch.setattr("uvicorn.run", lambda *args, **kw: None)
+    monkeypatch.setattr("uvicorn.Server.run", lambda *args, **kw: None)
     app.main()
     assert seen == [7]
 
