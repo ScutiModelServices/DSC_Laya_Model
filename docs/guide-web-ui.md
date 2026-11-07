@@ -1,4 +1,4 @@
-# LayaModel: the admin web UI
+# DSC_Laya_Model: the admin web UI
 
 One page, `/admin/`, for tokens and CPU threads. It is the same for every way of running the service (Docker on the
 same device, Docker on a deployment device, no Docker). Only the address differs:
@@ -50,7 +50,7 @@ are approximate. Request counts are added to the file with that same write; uses
 counted in memory, so a crash can lose up to a minute of them. Old token files without the field still load and show **never** until next use. A companion
 `tokens.json.lock` file serializes updates across replicas without adding dependencies.
 
-Tokens live in `tokens.json` (`LAYA_TOKENS_FILE`). In Docker that is the `tokens` volume at `/data`, so they survive
+Tokens live in `tokens.json` (`LAYA_TOKENS_FILE`). In Docker that is the `dsc_laya_model_data` volume at `/data`, so they survive
 `docker compose down` and rebuilds. Without Docker it is `tokens.json` in the folder the service starts from. Tokens
 are enforced only while `LAYA_ADMIN_PASSWORD` is set.
 
@@ -75,7 +75,7 @@ The replicas tile and muted line **Replicas: N. Change LAYA_REPLICAS in .env, th
 The page cannot change it; each replica loads its own copy of the models, so it multiplies RAM. To change it, set `LAYA_REPLICAS` in `.env`, then:
 ```bash
 docker compose up -d --build
-docker compose restart laya_lb
+docker compose restart dsc_laya_model_lb
 ```
 `Replicas: unknown` means the variable is not set, which is normal without Docker.
 
@@ -109,14 +109,14 @@ The **Settings** card changes options without editing `.env` or restarting: upda
 
 ## Settings on the admin page
 
-These are edited on the **Settings** card of `/admin/` and saved in `settings.json` beside the tokens, so all replicas share them: `LAYA_UPDATE_CHECK_HOURS`, `LAYA_MAX_INFLIGHT`, `LAYA_SYNC_SECONDS`, `LAYA_CACHE_SIZE`, `LAYA_MAX_PROJECT_MODELS`, `LAYA_PROJECT_WAIT_SECONDS`, `LAYA_PROJECT_MODELS_DIR` and `LAYA_WARM` (the last is read at start). A saved value beats the environment variable. The compose file no longer passes them, so a `.env` value only applies if you add the variable under `environment:` of `laya`. Still in `.env`: `LAYA_ADMIN_PASSWORD`, `LAYA_PORT`, `LAYA_REPLICAS`, `LAYA_TORCH_THREADS` (a starting value for the CPU threads card) and `LAYA_OFFLINE`.
+These are edited on the **Settings** card of `/admin/` and saved in `settings.json` beside the tokens, so all replicas share them: `LAYA_UPDATE_CHECK_HOURS`, `LAYA_MAX_INFLIGHT`, `LAYA_SYNC_SECONDS`, `LAYA_CACHE_SIZE`, `LAYA_MAX_PROJECT_MODELS`, `LAYA_PROJECT_WAIT_SECONDS`, `LAYA_PROJECT_MODELS_DIR` and `LAYA_WARM` (the last is read at start). A saved value beats the environment variable. The compose file no longer passes them, so a `.env` value only applies if you add the variable under `environment:` of `dsc_laya_model`. Still in `.env`: `LAYA_ADMIN_PASSWORD`, `LAYA_PORT`, `LAYA_REPLICAS`, `LAYA_TORCH_THREADS` (a starting value for the CPU threads card) and `LAYA_OFFLINE`.
 
 ## Updating the models
 
-The **Updates** card shows the installed `laya` package and each weights repository next to the newest one, and flags what is newer. **Check now** looks right away; the replicas also check every `LAYA_UPDATE_CHECK_HOURS`.
+The **Updates** card shows the installed `dsc_laya_model` package and each weights repository next to the newest one, and flags what is newer. **Check now** looks right away; the replicas also check every `LAYA_UPDATE_CHECK_HOURS`.
 
-- **Weights:** **Download new weights** fetches the newest revision from the Hub into the shared `models` volume and reloads the models on the replica that took the click. The other replicas notice within `LAYA_SYNC_SECONDS` and reload them themselves; the models are loaded again, so each replica needs RAM for the old and new copy for a moment. The download is the Hub's current `main`, not the reviewed SHA in `laya.revisions.PINNED_REVISIONS`; set `LAYA_REVISION=reviewed` to pin a deployment to the reviewed one.
-- **Package:** only reported. A running container cannot change its own install: run `uv lock --upgrade-package laya`, then `docker compose up -d --build` and `docker compose restart laya_lb`.
+- **Weights:** **Download new weights** fetches the newest revision from the Hub into the shared `dsc_laya_model_models` volume and reloads the models on the replica that took the click. The other replicas notice within `LAYA_SYNC_SECONDS` and reload them themselves; the models are loaded again, so each replica needs RAM for the old and new copy for a moment. The download is the Hub's current `main`, not the reviewed SHA in `laya.revisions.PINNED_REVISIONS`; set `LAYA_REVISION=reviewed` to pin a deployment to the reviewed one.
+- **Package:** only reported. A running container cannot change its own install: run `uv lock --upgrade-package laya`, then `docker compose up -d --build` and `docker compose restart dsc_laya_model_lb`.
 
 ## Connect to this service
 

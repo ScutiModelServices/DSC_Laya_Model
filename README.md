@@ -1,6 +1,6 @@
-# LayaModel
+# DSC_Laya_Model
 
-The one place Laya (the `laya` package, torch and the model weights) is installed. Projects send it
+The one place Laya (the `dsc_laya_model` package, torch and the model weights) is installed. Projects send it
 typed questions over HTTP instead of loading the models themselves.
 
 ## API
@@ -86,9 +86,9 @@ Local: `run.bat` (port 9120). Docker, with a load balancer:
 docker compose up -d --build
 ```
 
-`laya` runs `LAYA_REPLICAS` copies (default 1) behind an nginx (`laya_lb`, `least_conn`, one retry on
-error/timeout). Each replica keeps its own models in RAM; downloaded weights are shared in the `models`
-volume. After changing the replica count, run `docker compose restart laya_lb`. Full guide (first start, scaling,
+`dsc_laya_model` runs `LAYA_REPLICAS` copies (default 1) behind an nginx (`dsc_laya_model_lb`, `least_conn`, one retry on
+error/timeout). Each replica keeps its own models in RAM; downloaded weights are shared in the `dsc_laya_model_models`
+volume. After changing the replica count, run `docker compose restart dsc_laya_model_lb`. Full guide (first start, scaling,
 troubleshooting): [deployment.md](deployment.md).
 
 ### Guides
@@ -130,7 +130,7 @@ Every project reaches the service the same way: `POST /v1/ask` with a strategy.
 
 ## License
 
-The service code is MIT. The `laya` package and the Laya weights it downloads are by Convai Innovations
+The service code is MIT. The `dsc_laya_model` package and the Laya weights it downloads are by Convai Innovations
 under Apache-2.0; read their terms before redistributing the weights. See [LICENSE](LICENSE) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Try it from the admin page

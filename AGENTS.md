@@ -1,4 +1,4 @@
-# LayaModel
+# DSC_Laya_Model
 
 Laya prediction models served over HTTP, behind the shared model-service admin page, tokens and settings. Port 9120, env prefix `LAYA_`, token prefix `laya_`.
 

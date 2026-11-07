@@ -1,4 +1,4 @@
-# LayaModel: without Docker, same device
+# DSC_Laya_Model: without Docker, same device
 
 Run the service directly with Python. One process, no load balancer, listens on `127.0.0.1:9120`.
 
@@ -8,12 +8,12 @@ Run the service directly with Python. One process, no load balancer, listens on 
 - RAM for both models (one copy).
 
 ## Windows
-Double-click `run.bat` or run it in a terminal from `LayaModel/`. It runs `uv sync` to create or update `.venv`
+Double-click `run.bat` or run it in a terminal from `DSC_Laya_Model/`. It runs `uv sync` to create or update `.venv`
 (needs uv: `winget install astral-sh.uv`), then starts `python src/app.py`.
 
 ## Linux / macOS
 ```bash
-cd LayaModel
+cd DSC_Laya_Model
 uv sync
 uv run python src/app.py
 ```
