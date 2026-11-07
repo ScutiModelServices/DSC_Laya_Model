@@ -142,3 +142,4 @@ Ask sends `text` and a questions JSON object to `POST /v1/ask`, with the selecte
 ## Documentation
 
 - [Purpose: input, output and what it is for](docs/purpose.md)
+- [Test it from the command line](docs/guide-cli.md)
