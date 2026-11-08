@@ -1,7 +1,7 @@
 # DSC_Laya_Model: Docker on a deployment device (ZimaOS server)
 
 Run the service on a separate always-on box (default `lex@scutiserver1.local`, folder
-`/media/ZimaOS-HD/Apps/DSC_Laya_Model`). Laya is self-contained: it needs no other project on the box. Callers reach it
+`/media/ZimaOS-HD/Apps/ModelServices/DSC_Laya_Model`). Laya is self-contained: it needs no other project on the box. Callers reach it
 over the published port.
 
 ## Requirements on the box
@@ -27,9 +27,9 @@ reads committed `main`.
 ## 2. First-time setup on the box
 
 ```bash
-mkdir -p /media/ZimaOS-HD/Apps
-git clone -b live <your-repo-url> /media/ZimaOS-HD/Apps/DSC_Laya_Model
-cd /media/ZimaOS-HD/Apps/DSC_Laya_Model
+mkdir -p /media/ZimaOS-HD/Apps/ModelServices
+git clone -b live <your-repo-url> /media/ZimaOS-HD/Apps/ModelServices/DSC_Laya_Model
+cd /media/ZimaOS-HD/Apps/ModelServices/DSC_Laya_Model
 ```
 Create `.env` (deploy option 2 copies yours, or `cp .env.example .env` and edit):
 - `SERVICE_ADMIN_PASSWORD`: a real password.
@@ -110,7 +110,7 @@ on another (safe because `/v1/ask` is a pure function of its body).
 ## Updating
 
 ```bash
-cd /media/ZimaOS-HD/Apps/DSC_Laya_Model
+cd /media/ZimaOS-HD/Apps/ModelServices/DSC_Laya_Model
 git pull
 docker compose up -d --build
 docker compose restart dsc_laya_model_lb
