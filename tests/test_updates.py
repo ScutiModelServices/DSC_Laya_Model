@@ -59,23 +59,20 @@ def test_update_downloads_stale_weights_and_reloads_the_loaded_models():
     assert loads == [MODELS[0], MODELS[0]]  # loaded again; the model that was never loaded stays lazy
 
 
-def test_update_with_nothing_new_downloads_nothing():
+def test_explicit_download_replaces_weights_even_when_current():
     updates, registry, downloaded, loads = make(cached="new")
     registry.predict(MODELS[0], None)
     updates.update_weights()
-    assert downloaded == [] and loads == [MODELS[0]]
+    assert downloaded == ["org/laya"] and loads == [MODELS[0], MODELS[0]]
 
 
-def test_update_refuses_when_the_check_failed():
+def test_download_is_available_when_online_comparison_fails():
     updates, _, downloaded, _ = make(fail_remote=True)
-    with pytest.raises(RuntimeError, match="no network"):
-        updates.update_weights()
-    assert downloaded == []
+    updates.update_weights()
+    assert downloaded == ["org/laya"]
 
 
-def client(updates, offline=False, monkeypatch=None):
-    if offline:
-        monkeypatch.setenv("SERVICE_OFFLINE", "1")
+def client(updates):
     return TestClient(create_app(Registry(lambda c: FakeEngine()), "secret", updates=updates))
 
 
@@ -104,10 +101,9 @@ def test_a_failed_download_is_a_502_with_the_reason():
     assert response.status_code == 502 and "disk full" in response.json()["detail"]
 
 
-def test_updates_are_off_when_offline(monkeypatch):
-    http, admin = client(None, offline=True, monkeypatch=monkeypatch), {"X-Internal-Token": "secret"}
-    assert http.get("/admin/updates", headers=admin).json() == {"enabled": False}
-    assert http.post("/admin/updates/weights", headers=admin).status_code == 409
+def test_updates_are_always_enabled():
+    http, admin = client(None), {"X-Internal-Token": "secret"}
+    assert http.get("/admin/updates", headers=admin).json()["enabled"] is True
 
 
 def test_the_background_check_runs_at_start():

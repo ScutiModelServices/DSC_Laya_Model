@@ -6,7 +6,7 @@ Run the service in Docker on the machine you work on (your PC), so other program
 
 - Docker with Compose v2 (Docker Desktop on Windows/macOS).
 - RAM for the models **per replica** (each replica loads its own copy), so `SERVICE_REPLICAS` multiplies memory use. Keep `SERVICE_REPLICAS=1` on a PC.
-- Network access on the first start to download the weights (`SERVICE_OFFLINE` skips it once the weights are in the `dsc_laya_model_models` volume; see [Settings](#settings)).
+Weights load only from downloaded files. Use the Updates card to download them before first inference.
 - CPU only. The Dockerfile installs the CPU build of torch and fails the build if a CUDA or ROCm build is found.
 
 ## Steps
@@ -20,8 +20,8 @@ Run the service in Docker on the machine you work on (your PC), so other program
    ```bash
    docker compose up -d --build
    ```
-   First start downloads the weights into the `dsc_laya_model_models` volume. `dsc_laya_model_lb` only starts after a replica is healthy
-   (up to 120 s grace). Watch with `docker compose ps` and `docker compose logs -f dsc_laya_model`.
+   The admin Download installs the weights into the `dsc_laya_model_models` volume. `dsc_laya_model_lb` only starts after a replica is healthy
+   (300s startup grace; model readiness is separate). Watch with `docker compose ps` and `docker compose logs -f dsc_laya_model`.
 3. Check:
    ```bash
    curl http://127.0.0.1:29220/health
@@ -60,11 +60,9 @@ Hub weight downloads leave local artifacts alone; restart after replacing one al
 | `SERVICE_ADMIN_PASSWORD` | empty | Password for the `/admin/` page, where per-project tokens are made. When set, every call except `/health` must send one of those tokens as `X-Internal-Token` (Garrison: Laya project token in `apps/garrison/.env`). Empty = no auth. |
 | `SERVICE_WARM` | `1` | Load both models at start (also on the Settings card). With it off the first request pays the load time. |
 | `SERVICE_TORCH_THREADS` | torch decides | Cap on torch CPU threads; `/health` reports the value in use, `/admin/` can change it and saves the value (other replicas apply it within a few seconds). Use the number of physical cores (`lscpu`: cores x sockets), not logical CPUs; more threads than cores slows every call. |
-| `SERVICE_UPDATE_CHECK_HOURS` | `6` | How often each replica looks for a newer `dsc_laya_model` package (PyPI) and newer weights (Hugging Face). It only reports; `0` turns the timer off. Off too with `SERVICE_OFFLINE=1`. |
 | `SERVICE_MAX_INFLIGHT` | `0` | `/v1/ask` calls each replica lets wait for the models at once; more get `429` with `Retry-After: 5`. `0` means 4. |
 | `SERVICE_SYNC_SECONDS` | `10` | How often a replica looks for weights another replica downloaded (a marker file in the models volume) and reloads its models. `0` turns it off. |
 | `SERVICE_CACHE_SIZE` | `256` | Answers each replica keeps for identical `/v1/ask` requests (response headers `X-Laya-Cache` and `X-Cache`: `hit` or `miss`). Cleared by new weights and by changed project files. `0` turns it off. |
-| `SERVICE_OFFLINE` | unset | `1` uses only already-downloaded weights. Neither compose file passes it: add it under `environment:` of `dsc_laya_model` to use it. |
 | `SERVICE_PROJECT_MODELS_DIR` | unset | Local project-checkpoint root; empty disables it. With Docker use `/models/projects` inside the shared `dsc_laya_model_models` volume. |
 | `SERVICE_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines per replica (minimum `1`); LRU evicts idle engines only. Base models are never evicted. |
 | `SERVICE_PROJECT_WAIT_SECONDS` | `30` | How long a request waits for a free project slot before a `503` with `Retry-After: 5`. |
@@ -80,11 +78,8 @@ this service, so the two folders can sit anywhere and be started in any order.
 ## First start
 
 1. The build installs torch and the service. The image has no weights.
-2. Each replica downloads the weights into the `dsc_laya_model_models` volume the first time. Replicas
-   share the volume, so later starts and extra replicas reuse the download.
-3. `dsc_laya_model_lb` starts only after a replica passes its health check. The check allows 120 s (`start_period`) before
-   failures count, so a slow first download can leave the stack `unhealthy`; run `docker compose ps` and wait, or
-   raise `start_period`.
+2. Open `/admin/` → Updates → Download to install weights in the shared `dsc_laya_model_models` volume. Replicas load these downloaded files.
+3. `dsc_laya_model_lb` starts after the HTTP health check passes, including when weights are absent. `start_period` is 300s; model readiness is reported separately by `/health`.
 
 ## Check it works
 
@@ -117,11 +112,12 @@ docker compose up -d --build && docker compose restart dsc_laya_model_lb   # aft
 | `address already in use` on 29220 | Another Laya (a caller's own stack or `run.bat`) is running. Stop it or change `SERVICE_PORT`. |
 | Replicas restart in a loop | Out of RAM. Lower `SERVICE_REPLICAS`. |
 | 401 Invalid token | Caller token missing or revoked; make one on `/admin/`. |
-| `dsc_laya_model_lb` never starts | No replica is healthy yet (first download, or out of memory). Check `docker compose logs dsc_laya_model`. |
+| `dsc_laya_model_lb` never starts | No replica is healthy yet (startup failure, or out of memory). Check `docker compose logs dsc_laya_model`. |
 | Garrison reports that Laya is not configured | Its Laya connection URL is empty (running outside Compose and not set). Configure it through Citadel's existing consumer settings. |
 | Garrison: "could not be reached" | Service not started, or Garrison's Laya connection URL does not point at it. |
 | `bind: address already in use` on 29220 | Another process holds the port. Stop it, or set `SERVICE_PORT`. |
 | nginx 502 after scaling | `dsc_laya_model_lb` not restarted after the replica count changed. |
-| Offline start fails to load a model | `SERVICE_OFFLINE=1` but the weights are not in the `dsc_laya_model_models` volume yet. |
 
 The load balancer also joins external `citadel_core` as `dsc_laya_model_lb`. Start the Citadel stack first so that network exists; tool services on it use `http://dsc_laya_model_lb:29220`. Docker project and API image are `dsc_laya_model` and `dsc_laya_model:latest`; persistent volumes have explicit `dsc_laya_model_*` names. Volume migration and rollback instructions are in [CHANGELOG.md](../CHANGELOG.md).
+
+Before first inference, follow [Downloaded weights](guide-web-ui.md#downloaded-weights): open `/admin/` → Updates → Download. Startup never downloads weights.

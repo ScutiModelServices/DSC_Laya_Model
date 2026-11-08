@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 import strategies
 from cache import AnswerCache
 from answers import InputTooLong, check_questions
-from registry import PROJECT_PATTERN, ProjectBusy, Registry
+from registry import WeightsMissing, PROJECT_PATTERN, ProjectBusy, Registry
 import settings
 from options import SETTINGS
 from tokens import LatencyHistogram, TokenStore
@@ -108,15 +108,14 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
     """`admin_password` (SERVICE_ADMIN_PASSWORD) unlocks /admin/, where each project gets a token of its own; when it
     is set, every call except /health must send one of those tokens in the X-Internal-Token header. Unset = no
     auth at all (local use only). `tokens` holds the project tokens (SERVICE_TOKENS_FILE). `check_hours` > 0 looks for
-    newer Laya releases that often (SERVICE_UPDATE_CHECK_HOURS); it never downloads. `updates` is off with SERVICE_OFFLINE=1.
+    newer Laya releases that often (SERVICE_UPDATE_CHECK_HOURS); it never downloads.
     `cache_size` > 0 keeps that many answers per replica (SERVICE_CACHE_SIZE); `sync_seconds` > 0 makes the replica look
     that often for weights another replica downloaded (SERVICE_SYNC_SECONDS). `max_inflight` is how many /v1/ask calls may
     wait for the models at once (SERVICE_MAX_INFLIGHT, 0 = 4). `config` (the admin page's settings) replaces `warm`,
     `check_hours`, `cache_size`, `sync_seconds` and `max_inflight` and keeps them live; without it they stay fixed."""
     tokens = tokens or TokenStore(os.environ.get("SERVICE_TOKENS_FILE", "tokens.json"))
-    offline = os.environ.get("SERVICE_OFFLINE") == "1"
-    registry = registry or Registry(offline=offline, config=config)
-    updates = None if offline else updates or Updates(registry, marker=default_marker())
+    registry = registry or Registry(config=config)
+    updates = updates or Updates(registry, marker=default_marker())
     cache = AnswerCache()
     inflight = 0
 
@@ -170,7 +169,7 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
             _log.info("Reloaded models: new weights were downloaded by another replica")
 
     async def warm_up() -> None:
-        """In the background, so /health answers while the first start downloads the models."""
+        """In the background, so /health answers while downloaded models load."""
         try:
             await anyio.to_thread.run_sync(registry.warm, abandon_on_cancel=True)
         except Exception:
@@ -227,6 +226,8 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
             return HTTPException(413, {"message": str(error), "calls": getattr(error, "calls", [])})
         if isinstance(error, ValueError):
             return HTTPException(502, {"message": str(error), "calls": getattr(error, "calls", [])})
+        if isinstance(error, WeightsMissing):
+            return HTTPException(503, str(error), headers={"Retry-After": "5"})
         if isinstance(error, ProjectBusy):
             return HTTPException(503, str(error), headers={"Retry-After": "5"})
         _log.error("Laya strategy failed", exc_info=error)
@@ -339,13 +340,11 @@ def create_app(registry: Registry | None = None, admin_password: str | None = No
         return {"replicas": int(replicas) if replicas.isdigit() else None}
 
     def enabled() -> Updates:
-        if updates is None:
-            raise HTTPException(409, "Updates are off while SERVICE_OFFLINE=1")
         return updates
 
     @app.get("/admin/updates", dependencies=[Depends(admin)])
     def update_status() -> dict[str, Any]:
-        """The last check's result (no network); `enabled` is false with SERVICE_OFFLINE=1."""
+        """The last check's result (no network); downloads require an admin action."""
         return {"enabled": updates is not None, **(updates.status() if updates else {})}
 
     @app.post("/admin/updates/check", dependencies=[Depends(admin)])

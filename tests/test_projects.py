@@ -123,7 +123,7 @@ def test_busy_project_is_not_evicted_or_loaded_twice(tmp_path, monkeypatch):
     assert len(registry.loaded_projects()) == 1
 
 
-def test_offline_local_checkpoint_never_uses_hub_cache(tmp_path, monkeypatch):
+def test_local_checkpoint_never_uses_hub_cache(tmp_path, monkeypatch):
     import registry as module
     import sys
     from types import SimpleNamespace
@@ -133,7 +133,7 @@ def test_offline_local_checkpoint_never_uses_hub_cache(tmp_path, monkeypatch):
     loaded = []
     monkeypatch.setitem(sys.modules, "laya", SimpleNamespace(load=lambda name: loaded.append(name) or FakeEngine()))
     monkeypatch.setattr(module, "cached_checkpoint", lambda name: pytest.fail("Local checkpoint reached Hub cache"))
-    predict_project(Registry(offline=True), "demo", None)
+    predict_project(Registry(), "demo", None)
     assert loaded == [path]
 
 
@@ -229,3 +229,30 @@ def test_cache_is_not_reused_after_project_files_are_replaced(tmp_path, monkeypa
     assert http.post("/v1/ask", json=body).headers["X-Laya-Cache"] == "hit"
     os.utime(tmp_path / "demo" / "model.safetensors", ns=(5 * 10**9, 5 * 10**9))
     assert http.post("/v1/ask", json=body).headers["X-Laya-Cache"] == "miss"
+
+
+def test_base_loader_resolves_only_downloaded_checkpoint(monkeypatch):
+    import registry as module
+    import sys
+    from types import SimpleNamespace
+    loaded = []
+    monkeypatch.setitem(sys.modules, "laya", SimpleNamespace(load=lambda path: loaded.append(path) or FakeEngine()))
+    monkeypatch.setattr(module, "cached_checkpoint", lambda name: "downloaded-folder")
+    module._load_laya(MODELS[0])
+    assert loaded == ["downloaded-folder"]
+
+
+def test_missing_download_starts_health_and_returns_admin_hint(monkeypatch):
+    import registry as module
+    import sys
+    from types import SimpleNamespace
+    monkeypatch.setitem(sys.modules, "laya", SimpleNamespace(load=lambda path: pytest.fail("Missing weights reached loader")))
+    def missing(name):
+        raise module.WeightsMissing()
+    monkeypatch.setattr(module, "cached_checkpoint", missing)
+    http = TestClient(create_app(Registry()))
+    assert http.get("/health").json()["ready"] is False
+    response = http.post("/v1/ask", json=BODY)
+    assert response.status_code == 503
+    assert "admin" in response.json()["detail"] and "Download" in response.json()["detail"]
+    assert "://" not in response.json()["detail"]

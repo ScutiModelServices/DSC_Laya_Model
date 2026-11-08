@@ -80,6 +80,8 @@ pairwise comparison. Answers carry the pick, `answer_confidence`, `uncertain`,
 
 ## Run
 
+Weights load only from downloaded files. An empty installation still serves `/admin/` and `/health` with `ready: false`; inference returns 503. Open `/admin/` → **Updates** → **Download** before the first inference. Checks run online without downloading; only an admin Download replaces weights and reloads replicas.
+
 Local: `run.bat` (port 29220). Docker, with a load balancer:
 
 ```bash
@@ -101,7 +103,7 @@ troubleshooting): [deployment.md](deployment.md).
 ## Settings
 
 `SERVICE_HOST` (127.0.0.1), `SERVICE_PORT` (29220), `SERVICE_ADMIN_PASSWORD` (unlocks `/admin/`; empty = no auth), `SERVICE_WARM` (1 loads both models at start), `SERVICE_TORCH_THREADS` (cap on torch CPU threads; `/health` reports the value in use),
-`SERVICE_OFFLINE` (1 uses only already downloaded weights).
+Loading always uses downloaded weights.
 
 ## Tests
 

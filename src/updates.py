@@ -95,11 +95,16 @@ class Updates:
         try:
             installed, latest = self._installed(), self._latest_package()
             status["package"] = {"name": PACKAGE, "installed": installed, "latest": latest, "update": installed != latest}
-            for repo in self._repos():
-                cached, latest = self._cached_sha(repo), self._remote_sha(repo)
-                status["weights"].append({"repo": repo, "cached": cached, "latest": latest, "update": cached != latest})
         except Exception as error:  # offline, rate limited, repo gone: shown on the admin page, not raised
             status["error"] = f"{type(error).__name__}: {error}"
+        for repo in self._repos():
+            cached, latest = self._cached_sha(repo), None
+            try:
+                latest = self._remote_sha(repo)
+            except Exception as error:
+                status["error"] = f"{type(error).__name__}: {error}"
+            status["weights"].append({"repo": repo, "cached": cached, "latest": latest,
+                                      "update": latest is not None and cached != latest})
         self._status = status
         return status
 
@@ -125,12 +130,9 @@ class Updates:
             self._marker.write_text(self._seen, "utf-8")
 
     def update_weights(self) -> dict[str, Any]:
-        """Download every repository that has a newer revision, then reload the models. Raises when a download fails."""
+        """An explicit admin action replaces every downloaded repository, then reloads replicas."""
         with self._lock:
-            status = self._check()
-            if status["error"]:
-                raise RuntimeError(status["error"])
-            stale = [item["repo"] for item in status["weights"] if item["update"]]
+            stale = self._repos()
             for repo in stale:
                 self._download(repo)
             if stale:

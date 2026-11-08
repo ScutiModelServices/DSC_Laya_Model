@@ -109,7 +109,7 @@ The **Settings** card changes options without editing `.env` or restarting: upda
 
 ## Settings on the admin page
 
-These are edited on the **Settings** card of `/admin/` and saved in `settings.json` beside the tokens, so all replicas share them: `SERVICE_UPDATE_CHECK_HOURS`, `SERVICE_MAX_INFLIGHT`, `SERVICE_SYNC_SECONDS`, `SERVICE_CACHE_SIZE`, `SERVICE_MAX_PROJECT_MODELS`, `SERVICE_PROJECT_WAIT_SECONDS`, `SERVICE_PROJECT_MODELS_DIR` and `SERVICE_WARM` (the last is read at start). A saved value beats the environment variable. The compose file no longer passes them, so a `.env` value only applies if you add the variable under `environment:` of `dsc_laya_model`. Still in `.env`: `SERVICE_ADMIN_PASSWORD`, `SERVICE_PORT`, `SERVICE_REPLICAS`, `SERVICE_TORCH_THREADS` (a starting value for the CPU threads card) and `SERVICE_OFFLINE`.
+These are edited on the **Settings** card of `/admin/` and saved in `settings.json` beside the tokens, so all replicas share them: `SERVICE_UPDATE_CHECK_HOURS`, `SERVICE_MAX_INFLIGHT`, `SERVICE_SYNC_SECONDS`, `SERVICE_CACHE_SIZE`, `SERVICE_MAX_PROJECT_MODELS`, `SERVICE_PROJECT_WAIT_SECONDS`, `SERVICE_PROJECT_MODELS_DIR` and `SERVICE_WARM` (the last is read at start). A saved value beats the environment variable. The compose file no longer passes them, so a `.env` value only applies if you add the variable under `environment:` of `dsc_laya_model`. Still in `.env`: `SERVICE_ADMIN_PASSWORD`, `SERVICE_PORT`, `SERVICE_REPLICAS`, `SERVICE_TORCH_THREADS` (a starting value for the CPU threads card).
 
 ## Updating the models
 
@@ -137,3 +137,15 @@ The browser caps uploads at **10 MiB**, displayed text at **256 KiB**, and binar
 ### This service's request
 
 Ask sends `text` and a questions JSON object to `POST /v1/ask`, with the selected strategy and optional project. Streaming appends one NDJSON answer event per question. The operation menu also exposes question validation, vote combination and the strategy list.
+
+## Downloaded weights
+
+Weights load only from downloaded files. An empty installation still serves `/admin/` and `/health` with `ready: false`; inference returns 503. Open `/admin/` → **Updates** → **Download** before the first inference. Checks run online without downloading; only an admin Download replaces weights and reloads replicas.
+
+Alternatively, use the authenticated admin download route (replace the password placeholder):
+
+```bash
+curl -X POST http://127.0.0.1:29220/admin/updates/weights -H "X-Internal-Token: <ADMIN_PASSWORD>"
+```
+
+The Updates card shows the downloaded and online versions and reports when a newer version is available. A pinned file or local import has no online newer-version comparison. Download runs only when requested by an admin.

@@ -5,6 +5,8 @@ load balancer, `dsc_laya_model_lb`. Callers use `http://<host>:29220`; they neve
 
 It is its own Docker stack. Other projects (Citadel's legion, for example) call it over HTTP and never build or start it.
 
+Weights are downloaded explicitly from the [Updates card](docs/guide-web-ui.md#downloaded-weights); startup never downloads weights.
+
 ## Ways to run it
 
 Each path has its own guide. Pick one.

@@ -11,6 +11,7 @@ This file is the one instruction file for every coding agent; `CLAUDE.md` only i
 - Run: `run.bat run`, or `uv run python src/app.py` (add `--dotenv` to load `.env`), or `docker compose up -d --build`
 
 ## Rules
+- Load downloaded weights only. Startup, warm-up and inference never download; only the authenticated Updates Download callback may fetch weights. Missing weights keep health/admin available and inference returns 503 with an admin Download hint.
 - Follow the `model-service-parity` skill and `AI/ModelServices/_docs/SHARED-FEATURES.md` (what must match in every model service) and `AI/ModelServices/_docs/SERVICE-SPECIFIC.md` (what differs on purpose). A change to a shared feature goes to every service; a new difference goes into `SERVICE-SPECIFIC.md` in the same change.
 - `web/index.html`, `src/tokens.py`, `src/settings.py` and `.dockerignore` are copies shared with the other model services. Change one, copy it to the others, run `python tools/check_sync.py` in each repo.
 - `src/updates.py` is this service's own (it updates the models in its registry and syncs weights between replicas), so it is the one copy `check_sync.py` skips.
