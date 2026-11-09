@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-# The checkpoints callers may ask for. Anything else is refused before a download can start.
+# The checkpoints callers may ask for. Loading always uses downloaded local files.
 MODELS = ("convaiinnovations/laya", "typed-decisions")
 
 _REQUIRED_FILES = ("rl_agent_config.json", "model.safetensors", "encoder/config.json", "tokenizer/tokenizer.json")
@@ -22,25 +22,30 @@ PROJECT_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,47}$"
 def cached_checkpoint(checkpoint: str) -> str:
     """Absolute path of a complete, already downloaded checkpoint; never touches the network."""
     from huggingface_hub import snapshot_download
-    from laya.revisions import resolve_revision
     from laya.router import resolve_model_spec
 
     repo, subfolder = resolve_model_spec(checkpoint) or (checkpoint, None)
     try:
-        root = Path(snapshot_download(repo_id=repo, revision=resolve_revision(repo, None),
-                                      local_files_only=True, token=False))
+        root = Path(snapshot_download(repo_id=repo, local_files_only=True, token=False))
         root = (root / subfolder if subfolder else root).resolve()
     except (OSError, ValueError):
-        raise RuntimeError(f"Checkpoint {checkpoint!r} is not cached") from None
+        raise WeightsMissing() from None
     if not all((root / name).is_file() for name in _REQUIRED_FILES):
-        raise RuntimeError(f"Checkpoint {checkpoint!r} is not cached completely")
+        raise WeightsMissing()
     return str(root)
 
 
-def _load_laya(checkpoint: str, offline: bool) -> Any:
+class WeightsMissing(RuntimeError):
+    """Downloaded base weights are missing; expose only an admin recovery hint."""
+
+    def __init__(self) -> None:
+        super().__init__("Model weights are not downloaded. Ask an admin to press Download on the Updates card.")
+
+
+def _load_laya(checkpoint: str) -> Any:
     import laya
 
-    return laya.load(cached_checkpoint(checkpoint) if offline and checkpoint in MODELS else checkpoint)
+    return laya.load(cached_checkpoint(checkpoint) if checkpoint in MODELS else checkpoint)
 
 
 def _stamp(checkpoint: str) -> tuple:
@@ -69,8 +74,8 @@ class _ProjectEngine:
 class Registry:
     """`loader(checkpoint)` builds an engine with `predict(text, questions, max_len=)`; injectable for tests."""
 
-    def __init__(self, loader: Callable[[str], Any] | None = None, offline: bool = False, config: Any = None) -> None:
-        self._loader = loader or (lambda checkpoint: _load_laya(checkpoint, offline))
+    def __init__(self, loader: Callable[[str], Any] | None = None, config: Any = None) -> None:
+        self._loader = loader or _load_laya
         self._engines: dict[str, Any] = {}
         self.generation = 0  # bumped when the base weights are reloaded; part of the answer cache key
         self._locks = {model: threading.Lock() for model in MODELS}

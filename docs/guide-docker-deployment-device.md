@@ -1,7 +1,7 @@
 # DSC_Laya_Model: Docker on a deployment device (ZimaOS server)
 
 Run the service on a separate always-on box (default `lex@scutiserver1.local`, folder
-`/media/ZimaOS-HD/Apps/DSC_Laya_Model`). Laya is self-contained: it needs no other project on the box. Callers reach it
+`/media/ZimaOS-HD/Apps/ModelServices/DSC_Laya_Model`). Laya is self-contained: it needs no other project on the box. Callers reach it
 over the published port.
 
 ## Requirements on the box
@@ -27,9 +27,9 @@ reads committed `main`.
 ## 2. First-time setup on the box
 
 ```bash
-mkdir -p /media/ZimaOS-HD/Apps
-git clone -b live <your-repo-url> /media/ZimaOS-HD/Apps/DSC_Laya_Model
-cd /media/ZimaOS-HD/Apps/DSC_Laya_Model
+mkdir -p /media/ZimaOS-HD/Apps/ModelServices
+git clone -b live <your-repo-url> /media/ZimaOS-HD/Apps/ModelServices/DSC_Laya_Model
+cd /media/ZimaOS-HD/Apps/ModelServices/DSC_Laya_Model
 ```
 Create `.env` (deploy option 2 copies yours, or `cp .env.example .env` and edit):
 - `SERVICE_ADMIN_PASSWORD`: a real password.
@@ -44,7 +44,7 @@ docker compose up -d --build
 docker compose ps
 curl http://127.0.0.1:29220/health
 ```
-First start downloads weights into the `dsc_laya_model_models` volume; `dsc_laya_model_lb` waits for a healthy replica.
+The admin Download installs weights into the `dsc_laya_model_models` volume; `dsc_laya_model_lb` waits for a healthy replica.
 
 ## 4. Connect callers
 
@@ -110,7 +110,7 @@ on another (safe because `/v1/ask` is a pure function of its body).
 ## Updating
 
 ```bash
-cd /media/ZimaOS-HD/Apps/DSC_Laya_Model
+cd /media/ZimaOS-HD/Apps/ModelServices/DSC_Laya_Model
 git pull
 docker compose up -d --build
 docker compose restart dsc_laya_model_lb
@@ -130,3 +130,5 @@ A plain publish (`run.bat`, Deploy, option 1) only updates the `live` branch, so
 | nginx 502 after scaling or update | `docker compose restart dsc_laya_model_lb`. |
 | Permission denied on push | run.bat Deploy option 6. |
 | Port 29220 in use | Another Laya stack is running on the box (for example one built by a caller's own compose); both use 29220. |
+
+Before first inference, follow [Downloaded weights](guide-web-ui.md#downloaded-weights): open `/admin/` → Updates → Download. Startup never downloads weights.

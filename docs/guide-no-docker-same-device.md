@@ -4,7 +4,7 @@ Run the service directly with Python. One process, no load balancer, listens on 
 
 ## Requirements
 - Python 3.11 or newer.
-- Internet on the first start (weights download to the Hugging Face cache).
+- Internet for admin Download and online version checks; loading itself is local only.
 - RAM for both models (one copy).
 
 ## Windows
@@ -29,7 +29,6 @@ uv run python src/app.py
 | `SERVICE_ADMIN_PASSWORD` | empty | Unlocks `/admin/` and requires tokens on every call but `/health`. Empty = no auth. |
 | `SERVICE_WARM` | `1` | Load both models at start. |
 | `SERVICE_TORCH_THREADS` | torch decides | CPU thread cap. |
-| `SERVICE_OFFLINE` | unset | `1` uses only downloaded weights. |
 | `SERVICE_PROJECT_MODELS_DIR` | unset | Root containing finished `<project>/` checkpoints; empty disables them. |
 | `SERVICE_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines (minimum `1`); base engines stay separate. |
 | `SERVICE_PROJECT_WAIT_SECONDS` | `30` | Wait for a free project slot before answering `503`. |
@@ -44,7 +43,7 @@ Train typed-decisions elsewhere, then copy the complete checkpoint to, for examp
 Set `$env:SERVICE_PROJECT_MODELS_DIR = "D:/models"` in PowerShell before starting; Bash uses
 `SERVICE_PROJECT_MODELS_DIR=/path/to/models uv run python src/app.py`.
 The [required checkpoint files](../README.md#project-checkpoints) must be present; no model downloads are made
-for projects, even with `SERVICE_OFFLINE=1`.
+for projects.
 
 Send `"project": "garrison"` with `/v1/ask`. Names match `^[a-z0-9][a-z0-9_-]{0,47}$` (otherwise 422).
 Only TYPED uses the project checkpoint; English stays base. Missing artifacts fall back; responses and usage
@@ -69,3 +68,5 @@ Ctrl+C in the terminal. Do not run this and the Docker stack together: both use 
 
 ## Tests
 `uv run pytest`.
+
+Before first inference, follow [Downloaded weights](guide-web-ui.md#downloaded-weights): open `/admin/` → Updates → Download. Startup never downloads weights.
