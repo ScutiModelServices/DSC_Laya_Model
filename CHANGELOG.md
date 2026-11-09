@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Admin page: `CONFIG.tags` (same tags as `docs/purpose.md`) switch tag-driven notes: `gpu` shows a CPU-threads note, `license-restricted` shows a licence note on the Updates card.
+
 - Breaking: startup, warm-up and inference load downloaded weights only. Before first inference open `/admin/` → Updates → Download; an empty installation keeps health/admin available and returns 503 for inference.
 - Removed `SERVICE_OFFLINE`; loading downloaded weights is now the only mode, and online update checks stay available.
 
