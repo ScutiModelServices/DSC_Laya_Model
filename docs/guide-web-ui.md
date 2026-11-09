@@ -12,8 +12,9 @@ If `SERVICE_PORT` is changed, use that port.
 ## Before you open it
 
 The page needs the admin password: the value of `SERVICE_ADMIN_PASSWORD`.
-- Docker: set it in `.env` next to `docker-compose.yml`, then `docker compose up -d`.
-- No Docker: set it in `.env` in this folder and start with `run.bat` (it passes `--dotenv`), or set it in the environment first; a real environment variable wins over `.env`. A plain `python src/app.py` does not read `.env`.
+- Docker Desktop on this device: set it in `.env.compose` next to `docker-compose.yml`, then `docker compose --env-file .env.compose up -d`.
+- Deployment device: set it in `.env` next to `docker-compose.yml` (Deploy option 2 copies it), then `docker compose up -d`.
+- No Docker: set it in `.env.local` (or `.env`) in this folder and start with `run.bat` (it passes `--dotenv`), or set it in the environment first; a real environment variable wins over both files and `.env.local` wins over `.env`. A plain `python src/app.py` reads neither.
 - Empty password = no auth at all and the page answers `Admin password required (set SERVICE_ADMIN_PASSWORD)`. Set
   one to use the page.
 
@@ -64,16 +65,16 @@ shows a busy indicator during saving; a short **Saved** confirmation follows. Th
 - Range 1 to 256. The field shows the value in use now.
 - The change applies at once to the replica that answers the click and is saved to `settings.json` next to
   `tokens.json`. Other replicas pick it up within a few seconds; no restart is needed.
-- The saved value beats `SERVICE_TORCH_THREADS` from `.env`. Remove `settings.json` from the `/data` volume to go back
-  to the `.env` value.
+- The saved value beats `SERVICE_TORCH_THREADS` from the env file (`.env.compose` or `.env`). Remove `settings.json` from the `/data` volume to go back
+  to the env-file value.
 - `GET /health` reports the value in use as `torch_threads`.
 
 ## Replicas (read-only)
 
-The replicas tile and muted line **Replicas: N. Change SERVICE_REPLICAS in .env, then rebuild.** show `SERVICE_REPLICAS`.
-The page cannot change it; each replica loads its own copy of the models, so it multiplies RAM. To change it, set `SERVICE_REPLICAS` in `.env`, then:
+The replicas tile and muted line **Replicas: N. Change SERVICE_REPLICAS in .env.compose (or .env on the deployment device), then rebuild.** show `SERVICE_REPLICAS`.
+The page cannot change it; each replica loads its own copy of the models, so it multiplies RAM. To change it, set `SERVICE_REPLICAS` in `.env.compose` (or `.env` on the deployment device), then:
 ```bash
-docker compose up -d --build
+docker compose --env-file .env.compose up -d --build
 docker compose restart dsc_laya_model_lb
 ```
 `Replicas: unknown` means the variable is not set, which is normal without Docker.
@@ -83,7 +84,7 @@ docker compose restart dsc_laya_model_lb
 | Symptom | Fix |
 |---|---|
 | Page does not load | Service not running, wrong port, or blocked by a firewall. Test `/health`. |
-| `Wrong admin password` | Password differs from `SERVICE_ADMIN_PASSWORD` in the running container. Recreate it after editing `.env`. |
+| `Wrong admin password` | Password differs from `SERVICE_ADMIN_PASSWORD` in the running container. Recreate it after editing `.env.compose` or `.env`. |
 | `Admin password required (set SERVICE_ADMIN_PASSWORD)` | The password is empty. Set it and restart. |
 | Token lost | Revoke it and create a new one. |
 | Thread change not on every replica | Replicas read the saved value every second from the shared `/data` volume; check `torch_threads` in `/health` on each. |
@@ -104,7 +105,7 @@ When you create a token you can list the projects it may use (comma separated; e
 
 ## Settings
 
-The **Settings** card changes options without editing `.env` or restarting: update-check interval, caches and limits, and similar. Each row shows where its value comes from (saved, environment or default). A value saved here beats the environment variable; **Reset** removes it. Every replica reads the shared settings file, so a change applies within a few seconds. Rows marked "applies after a restart" are read once at start. The admin password, ports, replica count and other Docker settings stay in `.env` or the compose file, because the service cannot change its own container.
+The **Settings** card changes options without editing `.env.compose`, `.env` or restarting: update-check interval, caches and limits, and similar. Each row shows where its value comes from (saved, environment or default). A value saved here beats the environment variable; **Reset** removes it. Every replica reads the shared settings file, so a change applies within a few seconds. Rows marked "applies after a restart" are read once at start. The admin password, ports, replica count and other Docker settings stay in `.env` or the compose file, because the service cannot change its own container.
 
 ## Settings on the admin page
 
@@ -115,7 +116,7 @@ These are edited on the **Settings** card of `/admin/` and saved in `settings.js
 The **Updates** card shows the installed `dsc_laya_model` package and each weights repository next to the newest one, and flags what is newer. **Check now** looks right away; the replicas also check every `SERVICE_UPDATE_CHECK_HOURS`.
 
 - **Weights:** **Download new weights** fetches the newest revision from the Hub into the shared `dsc_laya_model_models` volume and reloads the models on the replica that took the click. The other replicas notice within `SERVICE_SYNC_SECONDS` and reload them themselves; the models are loaded again, so each replica needs RAM for the old and new copy for a moment. The download is the Hub's current `main`, not the reviewed SHA in `laya.revisions.PINNED_REVISIONS`; set `SERVICE_REVISION=reviewed` to pin a deployment to the reviewed one.
-- **Package:** only reported. A running container cannot change its own install: run `uv lock --upgrade-package laya`, then `docker compose up -d --build` and `docker compose restart dsc_laya_model_lb`.
+- **Package:** only reported. A running container cannot change its own install: run `uv lock --upgrade-package laya`, then `docker compose --env-file .env.compose up -d --build` and `docker compose restart dsc_laya_model_lb`.
 
 ## Connect to this service
 
