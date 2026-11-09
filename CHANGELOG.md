@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Admin page: the CPU threads card and tile are hidden when `CONFIG.tags` has `host-threads`, and the Project models card is shown only with `project-models`.
+
 - Admin page: `CONFIG.tags` (same tags as `docs/purpose.md`) switch tag-driven notes: `gpu` shows a CPU-threads note, `license-restricted` shows a licence note on the Updates card.
 
 - Breaking: startup, warm-up and inference load downloaded weights only. Before first inference open `/admin/` → Updates → Download; an empty installation keeps health/admin available and returns 503 for inference.
