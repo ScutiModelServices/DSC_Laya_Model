@@ -43,7 +43,7 @@ def test_check_reports_a_newer_package_and_newer_weights():
     status = updates.check()
     assert status["package"] == {"name": "laya", "installed": "0.4.21", "latest": "0.5.0", "update": True}
     assert status["weights"] == [{"repo": "org/laya", "cached": "old", "latest": "new", "update": True}]
-    assert updates.status() is status
+    assert {k: v for k, v in updates.status().items() if k != "progress"} == status
 
 
 def test_check_failure_is_reported_not_raised():

@@ -17,6 +17,8 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, Callable
 
+from progress import hub_blobs, hub_total, progress, tracking
+
 PACKAGE = "laya"
 
 
@@ -56,7 +58,8 @@ def _cached_sha(repo: str) -> str | None:
 def _download(repo: str) -> None:
     from huggingface_hub import snapshot_download
 
-    snapshot_download(repo_id=repo, token=False)
+    with tracking(repo, hub_total(repo, None), hub_blobs(repo)):
+        snapshot_download(repo_id=repo, token=False)
 
 
 def default_marker() -> Path:
@@ -84,7 +87,7 @@ class Updates:
 
     def status(self) -> dict[str, Any]:
         """The result of the last check; never touches the network."""
-        return self._status
+        return {**self._status, "progress": progress.snapshot()}
 
     def check(self) -> dict[str, Any]:
         with self._lock:
