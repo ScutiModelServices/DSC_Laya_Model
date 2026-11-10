@@ -76,16 +76,15 @@ def test_create_and_revoke_a_token(page):
     page.click("#signin-button")
     page.click('#admin-nav a[href="#tokens"]')
     sync_api.expect(page.locator("#dashboard")).to_be_visible()
-    sync_api.expect(page.locator("#empty")).to_be_visible()
     page.fill("#name", "Garrison")
     page.click("#create-button")
     sync_api.expect(page.locator("#fresh-token")).to_contain_text("laya_")
-    row = page.locator("#rows tr")
+    row = page.locator("#rows tr:not(:has-text(\"playground (temporary)\"))")
     sync_api.expect(row).to_contain_text("Garrison")
     sync_api.expect(row.locator('td[data-label="Requests"]')).to_have_text("0")
     row.get_by_role("button", name="Revoke").click()
     page.click("#confirm-revoke")
-    sync_api.expect(page.locator("#empty")).to_be_visible()
+    sync_api.expect(page.locator("#rows tr", has_text="Garrison")).to_have_count(0)
 
 
 def test_health_keeps_backend_specific_model_display(page):
@@ -107,7 +106,7 @@ def test_token_can_be_limited_to_projects(page):
     sync_api.expect(page.locator("#token-error")).to_contain_text("not valid")
     page.fill("#projects", "app-a, app-b")
     page.click("#create-button")
-    sync_api.expect(page.locator("#rows tr")).to_contain_text("Only: app-a, app-b")
+    sync_api.expect(page.locator("#rows tr:not(:has-text(\"playground (temporary)\"))")).to_contain_text("Only: app-a, app-b")
 
 
 def test_token_can_be_edited_and_shows_rate_and_expiry(page):
@@ -122,7 +121,7 @@ def test_token_can_be_edited_and_shows_rate_and_expiry(page):
     page.fill("#rate", "5")
     page.fill("#expires", "30")
     page.click("#create-button")
-    row = page.locator("#rows tr")
+    row = page.locator("#rows tr:not(:has-text(\"playground (temporary)\"))")
     sync_api.expect(row).to_contain_text("5/min")
     sync_api.expect(row).to_contain_text("Expires")
     row.get_by_role("button", name="Edit").click()
@@ -154,12 +153,9 @@ def _open_playground(page):
     page.click("#signin-button")
     page.click('#admin-nav a[href="#playground"]')
     sync_api.expect(page.locator("#playground")).to_be_visible()
-    made = page.request.post(page.url.split("#", 1)[0].rstrip("/") + "/tokens",
-                             headers={"X-Internal-Token": PASSWORD}, data={"name": "playground-browser"})
-    assert made.status == 200
-    token = made.json()["token"]
-    page.fill("#pg-token", token)
-    return token
+    sync_api.expect(page.locator("#pg-token")).to_be_hidden()
+    sync_api.expect(page.locator("#pg-token")).not_to_have_value("", timeout=15000)  # filled from a temporary token
+    return page.locator("#pg-token").input_value()
 
 
 def _assert_playground_finished(page, token):
@@ -192,7 +188,7 @@ def _fill_laya_playground(page, text="hi"):
 def test_playground_invalid_public_token_does_not_sign_out_admin(page):
     _open_playground(page)
     _fill_laya_playground(page)
-    page.fill("#pg-token", "invalid-public-token")
+    page.evaluate("() => { document.getElementById('pg-token').value = 'invalid-public-token'; }")  # the field is hidden
     page.click("#pg-send")
     sync_api.expect(page.locator("#pg-status")).to_contain_text("HTTP 401")
     sync_api.expect(page.locator("#pg-output")).to_contain_text("Invalid token")
@@ -257,8 +253,8 @@ def test_playground_rejects_oversized_output_and_remains_usable(page):
     sync_api.expect(page.locator("#pg-send")).to_be_enabled()
     assert len(page.locator("#pg-output").inner_text()) <= 256 * 1024
     page.click("#pg-reset")
-    assert page.locator("#pg-token").input_value() == ""
-    assert page.locator("#pg-curl").text_content() == ""
+    assert page.locator("#pg-token").input_value() != ""  # reset keeps the session's temporary token
+    assert "oversized" not in page.locator("#pg-output").inner_text()  # curl may show the automatic choices lookup
 
 
 @pytest.mark.parametrize("operation, expected", [("1", '"ok": true'), ("2", '"choice": "a"'), ("3", "english-only")])
