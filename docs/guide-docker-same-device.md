@@ -18,7 +18,7 @@ Weights load only from downloaded files. Use the Updates card to download them b
    Set `SERVICE_ADMIN_PASSWORD` (empty = no auth, fine for local-only use). Leave `SERVICE_PORT=29220`, `SERVICE_REPLICAS=1`.
 2. Start:
    ```bash
-   docker compose up -d --build
+   docker compose --env-file .env.compose up -d --build
    ```
    The admin Download installs the weights into the `dsc_laya_model_models` volume. `dsc_laya_model_lb` only starts after a replica is healthy
    (300s startup grace; model readiness is separate). Watch with `docker compose ps` and `docker compose logs -f dsc_laya_model`.
@@ -39,7 +39,7 @@ Set the **Project models folder** on the admin Settings card to `/models/project
 checkpoints. Leave it empty to disable project loading. Copy each complete directory into the shared volume:
 
 ```bash
-docker compose up -d --build
+docker compose --env-file .env.compose up -d --build
 docker compose exec dsc_laya_model mkdir -p /models/projects
 docker compose cp ./garrison laya:/models/projects/garrison
 ```
@@ -67,7 +67,7 @@ Hub weight downloads leave local artifacts alone; restart after replacing one al
 | `SERVICE_MAX_PROJECT_MODELS` | `2` | Maximum resident project engines per replica (minimum `1`); LRU evicts idle engines only. Base models are never evicted. |
 | `SERVICE_PROJECT_WAIT_SECONDS` | `30` | How long a request waits for a free project slot before a `503` with `Retry-After: 5`. |
 
-Put the variables in a `.env` next to the compose file that runs the stack (this folder).
+Put the variables in a `.env.compose` next to the compose file (start with `docker compose --env-file .env.compose up -d --build`) that runs the stack (this folder).
 
 ## Callers
 
@@ -102,7 +102,7 @@ A 422 means the service is up and checking requests (an empty question set is in
 docker compose ps          # state
 docker compose logs -f dsc_laya_model
 docker compose down        # stop (weights volume is kept)
-docker compose up -d --build && docker compose restart dsc_laya_model_lb   # after a code change
+docker compose --env-file .env.compose up -d --build && docker compose restart dsc_laya_model_lb   # after a code change
 ```
 
 ## Problems

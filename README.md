@@ -85,7 +85,7 @@ Weights load only from downloaded files. An empty installation still serves `/ad
 Local: `run.bat` (port 29220). Docker, with a load balancer:
 
 ```bash
-docker compose up -d --build
+docker compose --env-file .env.compose up -d --build
 ```
 
 `dsc_laya_model` runs `SERVICE_REPLICAS` copies (default 1) behind an nginx (`dsc_laya_model_lb`, `least_conn`, one retry on
