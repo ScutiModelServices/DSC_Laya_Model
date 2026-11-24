@@ -7,6 +7,7 @@ name: dsc_laya_model
 
 services:
   dsc_laya_model:
+    extra_hosts: ["host.docker.internal:host-gateway"]  # reaches services published on the host
     build: .
     image: dsc_laya_model:latest
     restart: unless-stopped
